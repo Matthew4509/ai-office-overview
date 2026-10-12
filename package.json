@@ -1,0 +1,12 @@
+{
+  "name": "ai-office-overview",
+  "version": "0.1.7",
+  "private": true,
+  "description": "An office that shows what your Claude Code threads are doing. Reads the transcripts on this PC; sends nothing anywhere.",
+  "type": "module",
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node --test \"test/*.test.mjs\""
+  },
+  "engines": { "node": ">=20" }
+}

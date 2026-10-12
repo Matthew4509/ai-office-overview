@@ -1,0 +1,252 @@
+:root {
+  --page: #f2f4f7;
+  --card: #ffffff;
+  --ink: #1d2533;
+  --soft: #5a6577;
+  --line: #d9dee6;
+  --accent: #2457d6;
+  --accent-ink: #ffffff;
+  --working: #1f7a4d;
+  --thinking: #6b4bb8;
+  --needs: #b5470b;
+  --needs-bg: #fff1e6;
+  --idle: #4f5d73;
+  --home: #8a94a3;
+  --fault-bg: #fdecec;
+  --fault-ink: #8a1c1c;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #12161d;
+    --card: #1b212b;
+    --ink: #e8ecf2;
+    --soft: #a5afbe;
+    --line: #2e3745;
+    --accent: #5b8cff;
+    --accent-ink: #0c1220;
+    --working: #5fd39a;
+    --thinking: #b9a2f5;
+    --needs: #ffad73;
+    --needs-bg: #3a2516;
+    --idle: #b3bfd1;
+    --home: #7d8796;
+    --fault-bg: #3b1c1c;
+    --fault-ink: #ffc2c2;
+    color-scheme: dark;
+  }
+}
+[hidden] { display: none !important; }
+* { box-sizing: border-box; }
+html { font-size: 16px; }
+body {
+  margin: 0;
+  background: var(--page);
+  color: var(--ink);
+  font: 15px/1.45 system-ui, "Segoe UI", Roboto, Arial, sans-serif;
+}
+button, input { font: inherit; color: var(--ink); }
+button { cursor: pointer; }
+:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+
+.top {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 16px; background: var(--card); border-bottom: 1px solid var(--line);
+}
+.top h1 { margin: 0; font-size: 20px; }
+.top h1 a { color: inherit; text-decoration: none; }
+.top h1 a:hover, .top h1 a:focus-visible { text-decoration: underline; }
+.top-right { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.chip {
+  border: 1px solid var(--line); background: var(--card); border-radius: 999px;
+  padding: 5px 12px; font-size: 14px; white-space: nowrap;
+}
+.chip:hover { border-color: var(--accent); }
+.chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.purse { font-weight: 600; }
+
+.projects {
+  display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--line);
+  background: var(--page);
+}
+.projects .chip { display: inline-flex; gap: 8px; align-items: center; }
+.counts { display: inline-flex; gap: 6px; font-size: 13px; }
+.count { display: inline-flex; gap: 2px; align-items: center; }
+
+.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; align-items: start; }
+@media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
+
+.middle, .side { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 900px) { .side { position: static; max-height: none; } }
+
+.view-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
+.view-tabs button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 14px; }
+.view-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+
+#office { width: 100%; }
+#office canvas { width: 100%; height: auto; display: block; border-radius: 8px; touch-action: manipulation; }
+.office-hint { margin: 6px 0 0; color: var(--soft); font-size: 13px; }
+
+.group h2, .side h2 { font-size: 16px; margin: 4px 0 8px; }
+.group { margin-bottom: 14px; }
+.people { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.person {
+  display: grid; grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+  width: 100%; text-align: left; border: 1px solid var(--line); background: var(--card); border-radius: 10px; padding: 6px 10px;
+}
+.person:hover { border-color: var(--accent); }
+.person[aria-current="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.face { width: 34px; height: 34px; border-radius: 50%; background: var(--page); display: grid; place-items: center; font-weight: 700; overflow: hidden; }
+.face canvas, .face img { width: 34px; height: 34px; }
+.who { min-width: 0; }
+.who b { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who span { display: block; color: var(--soft); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.when { color: var(--soft); font-size: 13px; white-space: nowrap; }
+
+.state { font-weight: 600; white-space: nowrap; }
+.state-working { color: var(--working); }
+.state-thinking { color: var(--thinking); }
+.state-needs { color: var(--needs); }
+.state-idle { color: var(--idle); }
+.state-home { color: var(--home); }
+
+.waiting { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.wait {
+  width: 100%; text-align: left; border: 1px solid var(--line); border-left: 4px solid var(--needs);
+  background: var(--needs-bg); border-radius: 8px; padding: 8px 10px; display: grid; gap: 2px;
+}
+.wait .meta { font-size: 13px; color: var(--soft); }
+.wait q { quotes: none; }
+.empty { color: var(--soft); margin: 4px 0; }
+
+.card h2 { font-size: 20px; margin: 0; }
+.card .sub { color: var(--soft); margin: 2px 0 10px; }
+.card dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 4px 12px; margin: 10px 0; }
+.card dt { color: var(--soft); }
+.card dd { margin: 0; overflow-wrap: anywhere; }
+.asked { background: var(--needs-bg); border-left: 4px solid var(--needs); padding: 8px 10px; border-radius: 6px; margin: 8px 0; overflow-wrap: anywhere; }
+.steps { margin: 4px 0 10px; padding-left: 18px; }
+.steps li { margin: 2px 0; overflow-wrap: anywhere; }
+.steps time { color: var(--soft); font-size: 13px; margin-right: 6px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
+.btn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn.link { border: 0; background: none; color: var(--accent); padding: 4px 0; text-decoration: underline; }
+.nick-form input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--card); min-width: 0; flex: 1 1 160px; }
+.note { color: var(--soft); font-size: 13px; }
+
+.sheet {
+  position: fixed; inset: 0; background: rgba(10, 14, 22, 0.55); display: grid; place-items: center; padding: 16px; z-index: 10;
+}
+.sheet-box { background: var(--card); color: var(--ink); border-radius: 14px; padding: 16px; width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
+.sheet-box h2 { margin: 0 0 8px; font-size: 20px; }
+.shop-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
+.shop-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
+.shop-item .what { min-width: 0; }
+.shop-item .what span { display: block; color: var(--soft); font-size: 13px; }
+pre.code { background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+
+.fault { position: fixed; left: 16px; right: 16px; bottom: 16px; margin: 0; padding: 10px 14px; background: var(--fault-bg); color: var(--fault-ink); border-radius: 10px; z-index: 20; }
+/* Always three lines tall (name, what they do, what they hold), so the office above it never jumps when someone is picked. */
+/* The line about the person picked (or a locked room) sits to the right of the office, where the eye goes; under it on a narrow screen. */
+#office { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
+#office canvas { flex: none; }
+.office-strip { flex: 0 0 240px; margin: 0; }
+@media (max-width: 700px) {
+  #office { flex-direction: column; align-items: stretch; }
+  .office-strip { flex: none; margin: 6px 0 0; min-height: 4.4em; }
+}
+.shop-item .row { margin: 0; gap: 10px; flex-wrap: nowrap; }
+.shop-item canvas { width: 80px; height: 60px; flex: none; background: #f4f6f9; border-radius: 8px; }
+/* A locked room in Staff rewards: one line with what unlocking it costs and the Unlock button. */
+.room-locked { justify-content: space-between; align-items: center; gap: 8px; margin: 0; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
+
+/* The right panel's tabs: Needs attention | Staff rewards. */
+.side-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
+.side-tabs button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 12px; }
+.side-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+/* Staff rewards: tiles two across, each the same shape (picture, name, price and what is left to go, the button). */
+.side .shop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.side .shop-item { grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; padding: 8px; }
+.side .shop-item > .btn { justify-self: start; }
+.side .shop-item canvas { width: 64px; height: 48px; }
+.side .shop-item .what b { display: block; }
+/* Favourites: the card's two stars, and the small Hide box under a favourite who has gone home. */
+.fav-row { gap: 8px; flex-wrap: wrap; }
+.fav-btn[aria-pressed="true"] { border-color: #e0b04f; background: #fff6dc; color: #6b4e00; }
+#favs-view .people > li { display: grid; gap: 4px; align-content: start; }
+.fav-hide { display: flex; align-items: center; gap: 6px; margin: 0 2px; }
+/* The open-thread button on a person's card: on its own, centred. */
+.open-row { justify-content: center; }
+.side h3 { font-size: 15px; margin: 12px 0 4px; }
+/* The office fits the screen's height, as TOMLIN's overview window does: centred with the strip beside it, never taller than the window. */
+@media (max-width: 700px) { #office canvas { margin: 0 auto; } }
+
+/* The List and Favourites tabs as tiles: about five across on a desktop, fewer as the column narrows. */
+#list-view .people, #favs-view .people { grid-template-columns: repeat(auto-fill, minmax(max(150px, calc((100% - 40px) / 5)), 1fr)); gap: 10px; }
+/* One tile: fixed size whatever it says (long words are cut, never widen or grow it). */
+#list-view .people > li, #favs-view .people > li { min-width: 0; }
+#list-view .person, #favs-view .person {
+  grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; align-content: start; gap: 6px;
+  width: 100%; min-width: 0; height: 128px; padding: 10px 12px; overflow: hidden;
+}
+.tile-top { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.tile-top .face, .tile-top .face canvas { width: 40px; height: 40px; flex: none; }
+.tile-who { display: grid; min-width: 0; line-height: 1.3; }
+.tile-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-sub { min-width: 0; color: var(--soft); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile-action { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.tile-action .state { font-size: 13px; }
+.tile-note {
+  min-width: 0; color: var(--soft); font-size: 13px; line-height: 1.35; height: 2.7em; overflow: hidden; overflow-wrap: anywhere;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
+
+/* A person's card: the name line with EDIT on the right. */
+.card-title { display: flex; align-items: center; gap: 10px; }
+.card-name { flex: 1; min-width: 0; }
+.card-name h2 { overflow-wrap: anywhere; }
+.edit-btn { flex: none; align-self: flex-start; font-weight: 700; letter-spacing: .04em; }
+.edit-box { width: min(760px, 100%); }
+.edit-label { font-weight: 600; }
+
+/* TOMLIN's look editor, in this page's colours. */
+.look-editor { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 16px; align-items: start; }
+.look-preview { display: grid; gap: 8px; width: 236px; }
+.look-pics { display: flex; gap: 12px; }
+.look-portrait { border-radius: 50%; }
+.look-sprite { border-radius: 16px; }
+.look-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.look-side { display: grid; gap: 12px; min-width: 0; align-content: start; }
+.look-tabs { display: flex; flex-wrap: wrap; gap: 4px; }
+.look-tab { border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; background: var(--card); color: var(--ink); font-size: 14px; }
+.look-tab[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.look-colours { display: grid; gap: 6px; padding-top: 10px; border-top: 1px solid var(--line); }
+.look-colour-k { font-size: 14px; color: var(--soft); }
+.look-colour-k strong { color: var(--ink); font-weight: 600; }
+.look-choices { display: flex; flex-wrap: wrap; gap: 6px; }
+.look-choice { border: 1px solid var(--line); background: var(--card); color: var(--ink); }
+.look-text { border-radius: 999px; padding: 3px 12px; font-size: 14px; }
+.look-text[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
+.look-swatch { width: 30px; height: 30px; border-radius: 50%; padding: 0; display: grid; place-items: center; border: 2px solid rgba(0, 0, 0, 0.15); }
+.look-swatch[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 2px; }
+.look-tick { width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #27364e; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
+.look-face { border-radius: 12px; padding: 4px 4px 3px; display: grid; justify-items: center; gap: 2px; width: 64px; font-size: 12px; }
+.look-face[aria-pressed="true"] { border-color: var(--accent); border-width: 2px; padding: 3px 3px 2px; font-weight: 600; }
+.look-mini { border-radius: 50%; }
+.look-said { margin: 0; color: var(--soft); font-size: 13px; }
+@media (max-width: 700px) { .look-editor { grid-template-columns: minmax(0, 1fr); } .look-preview { width: auto; } }
+
+/* Recent messages on a person's card. */
+.msgs { list-style: none; margin: 4px 0 10px; padding: 0; display: grid; gap: 6px; }
+.msg { border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; display: grid; gap: 2px; }
+.msg-you { background: var(--page); border-left: 4px solid var(--accent); }
+.msg-ai { background: var(--card); border-left: 4px solid var(--working); }
+.msg-who { font-weight: 600; font-size: 13px; }
+.msg-who time { font-weight: 400; color: var(--soft); }
+.msg-text { white-space: pre-wrap; overflow-wrap: anywhere; font-size: 13px; display: -webkit-box; -webkit-line-clamp: 6; -webkit-box-orient: vertical; overflow: hidden; }
+
+/* While the transcripts are being read. */
+.loading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; background: var(--needs-bg); border-bottom: 1px solid var(--line); font-size: 14px; }
+.loading progress { flex: 0 1 220px; height: 10px; }

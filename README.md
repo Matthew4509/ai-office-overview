@@ -1,0 +1,99 @@
+# AI Office Overview
+
+An office that shows what your Claude Code threads are doing. Each thread is a little person at their project's desk:
+working, thinking in the meeting room, standing up with a "?" when they need you, resting when they have finished, and
+going home when they have gone quiet. The tokens Claude writes fill a purse that furnishes the office.
+
+It runs on your PC only. It reads Claude Code's transcripts and never sends them anywhere.
+
+## Start it
+
+You need Node.js 20 or newer. Double-click **Start AI Office Overview.cmd**, or run:
+
+```
+node server.mjs
+```
+
+The page opens by itself once the office is ready (or go to http://127.0.0.1:8860/). The very first start reads all
+your Claude transcripts once, which can take a minute: keep the window open. Later starts take about a second. The first
+start also opens the office: the purse counts from then on.
+
+## What you see
+
+- **AI Office Overview** (the title, top left) goes back to the office with all projects.
+- **Projects strip** (top): every project with a thread today, with how many people are working, thinking, need you,
+  or have finished. Click one to show only that project.
+- **The office** (or **List**, the same in words): click a person to open their card. What the person picked is doing
+  shows to the right of the office (under it on a narrow screen).
+- **Needs attention** (right panel, first tab): every thread whose last reply asked you something, longest waiting first. Press
+  "Answered: take off the list" on the card once you have dealt with it; it comes back if they ask again.
+- **A person's card** shows their name with **EDIT** beside it (their name and look, TOMLIN's look editor; both belong
+  to the seat), **Open in Claude** (opens their thread in the Claude desktop app), their project and seat, what they are
+  doing now and for how long, their recent messages, their last few steps, what they asked, and the tokens they wrote
+  (today, since the office opened, before it opened, all time).
+- **List** shows everyone as tiles (up to 5 across): picture and name, then project and what they are doing.
+- **Favourites** (third tab): each project with a favourite, its name as a subtitle and its favourite staff in a row.
+  Star a person with **Favourite** on their card, or everyone in their project with **Favourite project**. A favourite
+  who goes home stays at the office instead: they lie on a beach towel until their next thread starts, then walk back
+  to their desk. The star belongs to the seat, so the next handover thread in that seat is a favourite too. A
+  favourite who has gone home has a small **Hide** box (off the tab and the beach; "Show hidden" brings them back).
+- **Staff rewards** (right panel, second tab; "tokens to spend" at the top right opens it): the shop that furnishes the
+  office. The meeting room and the lounge start locked: dark, with a padlock on the door. Click one to see what it costs
+  and unlock it (the lounge 10M tokens, the meeting room 20M). Until then Staff rewards says "Room not available" for
+  it, with an Unlock button, instead of its furniture.
+
+## The rules
+
+- **One person per thread.** Their desk is the project folder they write files in. With no files written yet, it is
+  the folder their first message says START HERE in, then the folder they are working in.
+- **Consultants.** Work in the projects folder itself, or in two or more projects (an audit), makes a Consultant.
+- **Seats keep the name.** The first thread in a folder sits in seat 1 and is called after the folder. A second thread
+  there at the same time is seat 2 ("ai office overview 2"), sitting at the same desk on an extended table. Change nickname
+  names a seat for good: the next handover thread in that folder sits in the lowest free seat and is that person again.
+- **Gone home.** After an hour with nothing happening (Setup can change this) a thread goes home and frees its seat. If
+  its last reply asked something, it stays on Needs attention (marked gone home) for up to 7 days.
+- **Thinking.** A thread waiting on Claude for 15 seconds or more is thinking. Once the meeting room has a table, a long
+  think goes there, and everyone who has finished comes to help.
+- **Helpers** (subagents) earn for their thread only when they write files or run commands that change something.
+- **Deleted threads.** A thread deleted in Claude keeps its person, nickname and tokens: the office keeps its own record
+  in `data/`.
+- **The purse** is every output token Claude writes from the day the office opened, less what was spent. Prices are
+  TOMLIN's x 20, scaled to the output tokens a day of Claude Code work writes.
+
+## Easy or advanced setup
+
+- **Easy** (the default): the office reads the transcripts every 3 seconds. Nothing in Claude is changed. "Needs you"
+  is worked out from the last reply, and a permission prompt may not show.
+- **Advanced** (Setup > Turn on advanced setup): adds three hooks to Claude Code's settings file
+  (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
+  straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
+  takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing.
+
+## Helping someone set it up
+
+Agents (Claude and others) helping a user, for example to turn on advanced setup (hooks): read **AGENTS.md** first.
+
+## Files
+
+- `server.mjs`: the small server (127.0.0.1:8860 only).
+- `src/transcript.mjs` reads one transcript; `src/people.mjs` has the folder, seat and state rules; `src/office.mjs`
+  keeps the ledger and makes the snapshot; `src/shop.mjs` is the shop; `src/setup.mjs` does easy and advanced setup.
+- `public/`: the page. `office.js` and `look.js` are adapted from TOMLIN's office and staff looks.
+- `hook.mjs`: the advanced-setup hook.
+- `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
+- `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
+  read to.
+- `test/`: `npm test`.
+
+## Settings for testing
+
+- `PORT`: default 8860.
+- `AI_OFFICE_DATA`: the office's own folder (default `data/`). Use a scratch folder to look without opening the
+  office.
+- `AI_OFFICE_TRANSCRIPTS`: where the transcripts are (default `~/.claude/projects`).
+- `AI_OFFICE_SETTINGS`: the Claude settings file advanced setup changes (default `~/.claude/settings.json`). Point it
+  at a copy when testing.
+
+## Licence
+
+The office drawing and the staff looks come from TOMLIN (PolyForm Noncommercial 1.0.0), by the same owner.

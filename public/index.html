@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AI Office Overview</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header class="top">
+  <h1><a href="/" id="home" title="Back to the office with all projects">AI Office Overview</a></h1>
+  <div class="top-right">
+    <button type="button" id="purse" class="chip purse" hidden></button>
+    <button type="button" id="open-setup" class="chip">Setup</button>
+  </div>
+</header>
+<div id="loading" class="loading" role="status" hidden><span id="loading-words"></span> <progress id="loading-bar" max="1" value="0"></progress></div>
+<nav id="projects" class="projects" aria-label="Projects"></nav>
+<div class="layout">
+  <main class="middle">
+    <div class="view-tabs" role="tablist" aria-label="How to show the staff">
+      <button type="button" role="tab" id="tab-office" aria-selected="true">Office</button>
+      <button type="button" role="tab" id="tab-list" aria-selected="false">List</button>
+      <button type="button" role="tab" id="tab-favs" aria-selected="false">Favourites</button>
+    </div>
+    <section id="office-view" aria-label="The office">
+      <div id="office"></div>
+    </section>
+    <section id="list-view" aria-label="Everyone" hidden></section>
+    <section id="favs-view" aria-label="Favourites" hidden></section>
+  </main>
+  <aside class="side" id="side">
+    <div class="side-tabs" role="tablist" aria-label="Right panel">
+      <button type="button" role="tab" id="tab-needs" aria-selected="true" aria-controls="side-needs">Needs attention</button>
+      <button type="button" role="tab" id="tab-rewards" aria-selected="false" aria-controls="side-rewards">Staff rewards</button>
+    </div>
+    <div id="side-needs" role="tabpanel" aria-labelledby="tab-needs"></div>
+    <div id="side-rewards" role="tabpanel" aria-labelledby="tab-rewards" hidden></div>
+    <div id="side-card" aria-live="polite" hidden></div>
+  </aside>
+</div>
+<div id="setup" class="sheet" hidden></div>
+<div id="edit" class="sheet" hidden></div>
+<p id="fault" class="fault" role="alert" hidden></p>
+<script src="look.js"></script>
+<script src="office.js"></script>
+<script src="app.js"></script>
+<script src="setup.js"></script>
+</body>
+</html>
