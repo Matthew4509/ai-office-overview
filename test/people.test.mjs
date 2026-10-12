@@ -25,8 +25,19 @@ test('the folder: files written decide; two projects = the projects folder; else
   assert.equal(folderOf(thread({ wrote: ['C:\\Work\\projects\\Tomlin\\a.ts'] }), ROOT, NAMES), 'Tomlin');
   assert.equal(folderOf(thread({ wrote: ['C:\\Work\\projects\\Tomlin\\a.ts', 'C:\\Work\\projects\\ai office overview\\b.md'] }), ROOT, NAMES), '');
   assert.equal(folderOf(thread({ firstPrompt: 'START HERE ai office overview/H.md' }), ROOT, NAMES), 'ai office overview');
-  assert.equal(folderOf(thread({ cwd: 'C:\\Work\\projects\\Tomlin' }), ROOT, NAMES), 'Tomlin');
+  assert.equal(folderOf(thread({ startCwd: 'C:\\Work\\projects\\Tomlin', cwd: 'C:\\Work\\projects\\Tomlin' }), ROOT, NAMES), 'Tomlin');
   assert.equal(folderOf(thread({}), ROOT, NAMES), '');
+});
+
+test('with no work yet, the folder is where the thread started, however its shell moves after', () => {
+  const t = thread({ startCwd: 'C:\\Work\\projects\\Tomlin' });
+  for (const cwd of ['C:\\Work\\projects', 'C:\\Work\\projects\\garden planner B', 'C:\\Work\\projects\\Tomlin']) {
+    assert.equal(folderOf({ ...t, cwd }, ROOT, NAMES), 'Tomlin');
+  }
+  // Started in the projects folder: a Consultant until it works somewhere, wherever it looks around.
+  assert.equal(folderOf(thread({ cwd: 'C:\\Work\\projects\\garden planner B' }), ROOT, NAMES), '');
+  // An old summary with no start folder still uses the folder it is in.
+  assert.equal(folderOf(thread({ startCwd: '', cwd: 'C:\\Work\\projects\\Tomlin' }), ROOT, NAMES), 'Tomlin');
   assert.equal(folderOf(thread({ ran: [{ cmd: 'npm test', cwd: '/c/Work/projects/Tomlin' }] }), ROOT, NAMES), 'Tomlin');
 });
 

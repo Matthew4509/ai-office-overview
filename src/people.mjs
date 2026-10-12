@@ -53,7 +53,8 @@ export function startHereProject(prompt, root, names = []) {
 /**
  * The project folder a thread belongs to ('' = the projects folder itself: a Consultant).
  * Files it wrote and commands that did more than look decide; work in two or more projects = the projects folder
- * (an audit). With no work yet: the START HERE path in its first message, then the folder it is in.
+ * (an audit). With no work yet: the START HERE path in its first message, then the folder it started in (not the folder
+ * its shell is in now: that moves with every cd, and each move would give the thread a new seat).
  * `helpers` are its helpers' summaries; only helpers that did real work count.
  */
 export function folderOf(t, root, names = [], helpers = []) {
@@ -66,7 +67,7 @@ export function folderOf(t, root, names = [], helpers = []) {
   }
   if (found.size === 1) return [...found][0];
   if (found.size > 1) return '';
-  return startHereProject(t.firstPrompt, root, names) || projectOf(t.cwd, root, names) || '';
+  return startHereProject(t.firstPrompt, root, names) || projectOf(t.startCwd || t.cwd, root, names) || '';
 }
 
 /** The newest of a thread's own last step and its helpers' (a helper at work keeps the thread busy). */
