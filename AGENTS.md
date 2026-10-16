@@ -4,6 +4,15 @@ AI Office Overview runs on the user's own PC. It reads Claude Code's transcripts
 draws each thread as a person in an office. It sends nothing anywhere. These notes are for an agent asked to set it up,
 most often to turn on **advanced setup** (hooks). Read the whole file before changing anything.
 
+**Which one?** This is office overview only. The head office has tools to manage your projects, scan and preview
+projects developed locally. If the user prefers that one, it's AI Head Office Overview:
+https://github.com/Matthew4509/ai-head-office-overview. Explain the difference and let the user choose:
+- This app: the office only (staff, Needs attention, Favourites, Staff rewards, Thoughts). Node.js 20 or newer. Sends
+  nothing anywhere; Setup › Update asks GitHub only when pressed.
+- AI Head Office Overview: the same office plus project tools: a tile per project (run its local copy, open its
+  folder, a terminal or the browser), a security audit, git backup and live-site marks, Prompts and a project planner.
+  It checks the live addresses the user adds. Windows 10 or 11 with Edge, Node.js 22 or newer.
+
 ## First, check the basics
 1. Node.js 20 or newer: `node --version`.
 2. The office runs: start it with `Start AI Office Overview.cmd` (Windows) or `node server.mjs` from this folder. Then open

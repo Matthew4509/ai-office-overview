@@ -6,6 +6,16 @@ going home when they have gone quiet. The tokens Claude writes fill a purse that
 
 It runs on your PC only. It reads Claude Code's transcripts and never sends them anywhere.
 
+This is office overview only. The head office has tools to manage your projects, scan and preview projects developed
+locally. If you prefer that one, it's [AI Head Office Overview](https://github.com/Matthew4509/ai-head-office-overview).
+
+- **AI Office Overview** (this one): the office only. Your threads as staff, Needs attention, Favourites, Staff rewards
+  and the Thoughts chat. Needs Node.js 20 or newer. It sends nothing anywhere (Setup › Update asks GitHub only when you
+  press it).
+- **AI Head Office Overview**: the same office, plus a tile for each project (run its local copy, open its folder, a
+  terminal or the browser), a built-in security audit, git backup and live-site marks, Prompts and a project planner.
+  It checks the live addresses you add. Windows 10 or 11 with Edge, Node.js 22 or newer.
+
 ## Start it
 
 You need Node.js 20 or newer. Double-click **Start AI Office Overview.cmd**, or run:
@@ -61,7 +71,8 @@ start also opens the office: the purse counts from then on.
 - **The arcade machine** (lounge, once bought): click it to play Tetris, Lunar Lander or Moon Rover on its own cabinet.
   A game plays while its screen has the keyboard; best scores are kept in this browser.
 - **The vending machine** (kitchen): click it and insert a 1M-token coin. Everyone in gets an energy drink and, for a
-  minute, walks and talks three times as fast, then slumps.
+  minute, walks and talks three times as fast, then slumps. Anyone with nothing to do (resting, waiting for a reply, on
+  a beach towel) dashes from spot to spot around the office and the beach, and goes back when it wears off.
 - **The TV** (lounge) stands against the wall, with a bouncing logo that never quite hits a corner.
 - **Thoughts** (beside the office): the office chat. Each seat has its own character (shown on their card), with lines
   for what really happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped
@@ -121,6 +132,11 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
   read to.
 - `test/`: `npm test`.
+- `tools/head-office-check.mjs`: compares this app with AI Head Office Overview's office, which is the main copy.
+  `tools/head-office-differences.json` lists every difference left, each marked as on purpose, to bring here, or ahead
+  here. Run `node tools/head-office-check.mjs [path to Head Office's office folder]`: it says "Everything left is on the
+  list", or names what changed since. `--show <file>` prints one file's differences, and `--accept <file>` records them
+  once sorted.
 
 ## Settings for testing
 
