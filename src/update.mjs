@@ -161,7 +161,8 @@ export async function pull(dir) {
 export function restartAfterExit(dir) {
   const cmd = path.join(dir, 'Start AI Office Overview.cmd');
   const win = process.platform === 'win32' && fs.existsSync(cmd);
-  const run = win ? ['cmd.exe', '/c', 'start', '"AI Office Overview"', `"${cmd}"`] : [process.execPath, ...process.argv.slice(1).filter((a) => a !== '--open')];
+  // `start` alone would run the start file with cmd /K, which leaves the window open at a prompt after the office stops.
+  const run = win ? ['cmd.exe', '/c', 'start', '"AI Office Overview"', 'cmd.exe', '/c', `"${cmd}"`] : [process.execPath, ...process.argv.slice(1).filter((a) => a !== '--open')];
   const wait = `const pid=+process.argv[1];const go=()=>{try{process.kill(pid,0);setTimeout(go,300)}catch{require('child_process').spawn(process.argv[2],process.argv.slice(3),{detached:true,stdio:'ignore',windowsHide:${win ? 'false' : 'true'},windowsVerbatimArguments:${win},env:{...process.env,AI_OFFICE_OPEN:'0'}}).unref()}};go()`;
   spawn(process.execPath, ['-e', wait, String(process.pid), ...run], { detached: true, stdio: 'ignore', windowsHide: true, cwd: dir }).unref();
 }
