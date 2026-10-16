@@ -511,12 +511,64 @@
   setView(['list', 'favs'].includes(saved) ? saved : 'office');
   document.addEventListener('keydown', (e) => {
     if (e.key !== 'Escape') return;
-    for (const id of ['setup', 'edit']) {
+    for (const id of ['setup', 'edit', 'check']) {
       const sheet = document.getElementById(id);
       sheet.hidden = true;
-      if (id === 'edit') sheet.replaceChildren(); // the look editor's turning figure stops drawing once it is gone
+      if (id !== 'setup') sheet.replaceChildren(); // the look editor's turning figure (or a game) stops once it is gone
     }
   });
+
+  // A window of the office's own (the arcade machine, the vending machine): a title, what is in it, its buttons at
+  // the foot. A click beside it closes it, like Escape.
+  const win = document.getElementById('check');
+  function openWindow(title, body, buttons, wide = true) {
+    const box = el('div', { class: `sheet-box check-box${wide ? ' wide' : ''}`, role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'check-title' },
+      el('h2', { id: 'check-title', text: title }), ...body.flat().filter(Boolean), el('div', { class: 'row sheet-foot' }, ...buttons.filter(Boolean)));
+    win.replaceChildren(box);
+    win.hidden = false;
+    win.onclick = (e) => { if (e.target === win) closeWindow(); };
+    box.querySelector('button, textarea, input')?.focus();
+  }
+  function closeWindow() { win.hidden = true; win.replaceChildren(); }
+  app.openWindow = openWindow;
+  app.closeWindow = closeWindow;
+
+  // The windows (Setup, EDIT, and the office's own): Tab and Shift+Tab stay inside the open one, and closing it (Close,
+  // Escape, a click beside it) puts the focus back on what opened it, for keyboard and screen reader use.
+  const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
+  let lastOutside = null;
+  document.addEventListener('focusin', (e) => { if (!e.target.closest?.('.sheet')) lastOutside = e.target; });
+  // What opened it is also taken from the click, so it is known even when the window has not had the focus yet.
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest?.('button, a[href], summary, [tabindex]');
+    if (b && !b.closest('.sheet')) lastOutside = b;
+  }, true);
+  for (const id of ['setup', 'edit', 'check']) {
+    const sheet = document.getElementById(id);
+    if (!sheet) continue;
+    const isOpen = () => !sheet.hidden && sheet.childElementCount > 0;
+    let wasOpen = isOpen();
+    let back = null;
+    new MutationObserver(() => {
+      const open = isOpen();
+      if (open && !wasOpen) back = lastOutside;
+      if (!open && wasOpen) {
+        const was = back;
+        back = null;
+        if (was?.isConnected && !was.disabled && !document.querySelector('.sheet:not([hidden]) .sheet-box')) was.focus();
+      }
+      wasOpen = open;
+    }).observe(sheet, { attributes: true, attributeFilter: ['hidden'], childList: true });
+    sheet.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const items = [...sheet.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      if (!items.length) return;
+      const first = items[0], last = items[items.length - 1];
+      if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }
+      else if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    });
+  }
 
   refresh();
   setInterval(refresh, 3000);

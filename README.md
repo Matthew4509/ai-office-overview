@@ -55,7 +55,14 @@ start also opens the office: the purse counts from then on.
   buy, and a fitter carries each new piece of furniture in. The staff wave a thank-you, try out what is new, and the
   ones waiting for your answer take a short break in the lounge or on a deck chair, then come back. Pet rocks and
   rubber ducks sit on the desks (hover for their names); the ducks go to meetings, and a run of bugs calls the council
-  of ducks. Buy everything and treat the team to each treat once, and the trophy case (World's Best Boss) arrives.
+  of ducks. Ice creams and cake come to the kitchen table like the other treats, and desk cacti, a wall clock that
+  keeps the real time, a water cooler and an inflatable flamingo on the sea fill the rows three across. Buy everything
+  and treat the team to each treat once, and the trophy case (World's Best Boss) arrives.
+- **The arcade machine** (lounge, once bought): click it to play Tetris, Lunar Lander or Moon Rover on its own cabinet.
+  A game plays while its screen has the keyboard; best scores are kept in this browser.
+- **The vending machine** (kitchen): click it and insert a 1M-token coin. Everyone in gets an energy drink and, for a
+  minute, walks and talks three times as fast, then slumps.
+- **The TV** (lounge) stands against the wall, with a bouncing logo that never quite hits a corner.
 - **Thoughts** (beside the office): the office chat. Each seat has its own character (shown on their card), with lines
   for what really happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped
   reply, a bug found, working late, two at one desk. Only the kind of event (and a file's short name for "the same
@@ -108,7 +115,7 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
   `src/update.mjs` is Setup › Update.
 - `public/`: the page. `office.js` and `look.js` are adapted from TOMLIN's office and staff looks;
   `banter.js` has the office chat's characters and lines; `sun.js` works out sunrise and sunset for the Auto colours
-  (the server runs it too, so the page comes in its colours).
+  (the server runs it too, so the page comes in its colours); `arcade.js` is the arcade machine's three games.
 - `hook.mjs`: the advanced-setup hook.
 - `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was

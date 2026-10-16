@@ -9,14 +9,21 @@ export const SHOP = [
   { id: 'coffee', name: 'Coffee round', the: 'the coffee round', price: 200_000, keeps: false, most: 0, room: 'treats' },
   { id: 'donuts', name: 'Box of donuts', the: 'the box of donuts', price: 500_000, keeps: false, most: 0, room: 'treats' },
   { id: 'sandwiches', name: 'Sandwich platter', the: 'the sandwich platter', price: 400_000, keeps: false, most: 0, room: 'treats' },
+  { id: 'icecream', name: 'Ice creams', the: 'the ice creams', price: 300_000, keeps: false, most: 0, room: 'treats' },
+  { id: 'cake', name: 'Celebration cake', the: 'the celebration cake', price: 600_000, keeps: false, most: 0, room: 'treats' },
+  // Bought at the vending machine in the kitchen (a click on it), not from a tile.
+  { id: 'energy', name: 'Energy drinks', the: 'the energy drinks', price: 1_000_000, keeps: false, most: 0, room: 'treats' },
   { id: 'rocks', name: 'Pet rocks', the: 'the pet rocks', price: 200_000, keeps: true, most: 1, room: 'desks' },
   { id: 'ducks', name: 'Rubber ducks', the: 'the rubber ducks', price: 300_000, keeps: true, most: 1, room: 'desks' },
+  { id: 'cactus', name: 'Desk cacti', the: 'the desk cacti', price: 250_000, keeps: true, most: 1, room: 'desks' },
   { id: 'boardroom_key', name: 'Unlock the meeting room', the: 'the meeting room key', price: 20_000_000, keeps: true, most: 1, room: 'boardroom', unlocks: 'boardroom' },
   { id: 'lounge_key', name: 'Unlock the lounge', the: 'the lounge key', price: 10_000_000, keeps: true, most: 1, room: 'lounge', unlocks: 'lounge' },
   { id: 'table', name: 'Meeting room table', the: 'the meeting room table', price: 1_500_000, keeps: true, most: 1, room: 'boardroom' },
   { id: 'chairs', name: 'Pair of meeting room chairs', the: 'a pair of meeting room chairs', price: 500_000, keeps: true, most: 3, room: 'boardroom', needs: 'table' },
   { id: 'whiteboard', name: 'Whiteboard', the: 'the whiteboard', price: 800_000, keeps: true, most: 1, room: 'boardroom' },
   { id: 'plants', name: 'Indoor plants', the: 'the indoor plants', price: 600_000, keeps: true, most: 1, room: 'boardroom' },
+  { id: 'clock', name: 'Wall clock', the: 'the wall clock', price: 400_000, keeps: true, most: 1, room: 'boardroom' },
+  { id: 'cooler', name: 'Water cooler', the: 'the water cooler', price: 700_000, keeps: true, most: 1, room: 'boardroom' },
   { id: 'armchair', name: 'Armchair', the: 'the armchair', price: 600_000, keeps: true, most: 1, room: 'lounge' },
   { id: 'bookcase', name: 'Bookcase', the: 'the bookcase', price: 1_000_000, keeps: true, most: 1, room: 'lounge' },
   { id: 'sofa', name: 'Sofa', the: 'the sofa', price: 1_200_000, keeps: true, most: 1, room: 'lounge' },
@@ -25,6 +32,7 @@ export const SHOP = [
   { id: 'arcade', name: 'Arcade machine', the: 'the arcade machine', price: 2_500_000, keeps: true, most: 1, room: 'lounge' },
   { id: 'deckchair', name: 'Deck chair and umbrella', the: 'a deck chair and umbrella', price: 1_000_000, keeps: true, most: 6, room: 'beach' },
   { id: 'volleyball', name: 'Beach volleyball set', the: 'the beach volleyball set', price: 2_000_000, keeps: true, most: 1, room: 'beach' },
+  { id: 'flamingo', name: 'Inflatable flamingo', the: 'the inflatable flamingo', price: 800_000, keeps: true, most: 1, room: 'beach' },
 ];
 
 const PLACE = { desks: 'on the desks', treats: 'the kitchen', boardroom: 'the meeting room', lounge: 'the lounge', beach: 'on the beach' };
@@ -64,7 +72,7 @@ export function purseOf(earned, bought) {
 }
 
 /** The treats that count for "taking care of the team" (pizza is free, so it is not kept). */
-const TREATS = ['coffee', 'donuts', 'sandwiches'];
+const TREATS = ['coffee', 'donuts', 'sandwiches', 'icecream', 'cake'];
 /** Everything done: every room unlocked, every piece bought as many times as the office holds, and the team treated
  * to each treat at least once. */
 function allDone(bought) {
@@ -85,14 +93,16 @@ export function roomsOf(bought) {
   const has = (id) => countOf(bought, id) > 0;
   const lounge = Object.entries(LOUNGE_SPOTS).filter(([, id]) => has(id)).map(([spot]) => spot);
   return {
-    boardroom: { table: has('table'), chairs: Math.min(3, countOf(bought, 'chairs')) * 2, whiteboard: has('whiteboard'), plants: has('plants') },
+    boardroom: { table: has('table'), chairs: Math.min(3, countOf(bought, 'chairs')) * 2, whiteboard: has('whiteboard'), plants: has('plants'), clock: has('clock'), cooler: has('cooler') },
     lounge: { armchair: has('armchair'), bookcase: has('bookcase'), sofa: has('sofa'), tv: has('tv'), gym: has('gym'), arcade: has('arcade') },
     rest: ['coffee', 'vending', 'lunch', ...lounge],
     away: lounge.length ? lounge : ['window'],
     deckchairs: Math.min(6, countOf(bought, 'deckchair')),
     volleyball: has('volleyball'),
+    flamingo: has('flamingo'),
     ducks: has('ducks'),
     rocks: has('rocks'),
+    cactus: has('cactus'),
     trophy: trophyOf(bought),
     locked: locksOf(bought),
   };

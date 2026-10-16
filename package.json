@@ -1,6 +1,6 @@
 {
   "name": "ai-office-overview",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "private": true,
   "description": "An office that shows what your Claude Code threads are doing. Reads the transcripts on this PC; sends nothing anywhere.",
   "type": "module",

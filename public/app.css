@@ -299,3 +299,88 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 /* Setup › Update */
 .update-box { padding: 8px 0; }
 .update-list { margin: 6px 0; padding-left: 18px; max-height: 220px; overflow-y: auto; display: grid; gap: 3px; }
+
+/* The office's own windows (app.js openWindow): wider, with the buttons at the foot. */
+.sheet-box.wide { width: min(900px, calc(100vw - 32px)); }
+/* A window's buttons (Close and the rest) stay at its foot while what is above them scrolls: never out of sight. */
+.sheet-foot { justify-content: flex-end; border-top: 1px solid var(--line); position: sticky; bottom: -16px; z-index: 2; margin: 12px 0 -16px; padding: 10px 0 16px; background: var(--card); }
+
+/* The arcade machine's games (arcade.js): a cabinet with a lit marquee, the screen in its bezel, a control panel. */
+.sheet-box.arcade-box { width: min(560px, calc(100vw - 32px), calc((100vh - 330px) * 4 / 3 + 76px)); padding: 0; background: transparent; box-shadow: none; }
+.arcade-box > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.arcade-box > .sheet-foot { display: none; }
+.cabinet { position: relative; padding: 12px 18px 14px; border-radius: 22px 22px 10px 10px; background: linear-gradient(180deg, #4a3a75, #2c2248); color: #f2ecff; box-shadow: inset 0 0 0 4px #1b1530, 0 18px 40px rgba(0, 0, 0, 0.45); }
+.cabinet::before, .cabinet::after { content: ''; position: absolute; top: 84px; bottom: 70px; width: 5px; border-radius: 3px; background: linear-gradient(#ef8a91, #efbd72, #69bfe9); box-shadow: 0 0 8px rgba(239, 138, 145, 0.6); }
+.cabinet::before { left: 6px; }
+.cabinet::after { right: 6px; }
+.cab-marquee { display: grid; justify-items: center; gap: 2px; margin: 0 -6px 12px; padding: 8px 10px; border-radius: 12px; background: radial-gradient(ellipse at center, #fff3c4 0%, #f7cd50 45%, #e08a2e 100%); color: #3b1d0a; box-shadow: 0 0 18px rgba(247, 205, 80, 0.55), inset 0 -3px 0 rgba(0, 0, 0, 0.18); }
+.cab-brand { font: 900 26px/1 Consolas, 'Courier New', monospace; letter-spacing: 0.3em; text-indent: 0.3em; }
+.cab-sub { font: 700 13px/1.3 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.12em; text-transform: uppercase; }
+.cab-bezel { padding: 12px; border-radius: 14px; background: #111; box-shadow: inset 0 0 0 3px #000, inset 0 0 22px rgba(0, 0, 0, 0.9); }
+.cab-screen { position: relative; aspect-ratio: 4 / 3; overflow: hidden; border-radius: 8px; background: #0b1020; }
+.cab-screen::after { content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: 8px; background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.13) 0 1px, transparent 1px 3px); box-shadow: inset 0 0 30px rgba(105, 191, 233, 0.18); }
+.cab-screen > canvas { display: block; width: 100%; height: 100%; }
+.cab-screen > canvas:focus-visible { outline: 3px solid #69bfe9; outline-offset: -3px; }
+.cab-panel { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 12px -8px 0; padding: 7px 22px; border-radius: 10px 10px 4px 4px; background: linear-gradient(180deg, #6b5aa0, #3b2f5c); box-shadow: inset 0 2px 0 rgba(255, 255, 255, 0.15), 0 4px 0 #1b1530; }
+.cab-stick { position: relative; width: 52px; height: 52px; flex: none; border-radius: 50%; background: radial-gradient(circle, #111 0 30%, #2d2d2d 32% 62%, #161616 64%); }
+.cab-stick::before { content: ''; position: absolute; left: 23px; top: 8px; width: 6px; height: 20px; border-radius: 3px; background: #9aa1a8; }
+.cab-stick > span { position: absolute; left: 13px; top: -6px; width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #ffc2c7, #d23a4a 65%); box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4); }
+.cab-buttons { display: flex; gap: 20px; }
+.cab-btn { display: grid; justify-items: center; gap: 4px; padding: 0; border: 0; background: none; color: #f2ecff; font: 700 13px/1.2 'Segoe UI', system-ui, sans-serif; cursor: pointer; }
+.cab-cap { width: 36px; height: 36px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.55) 0 14%, var(--cap) 46%); box-shadow: 0 4px 0 rgba(0, 0, 0, 0.45), inset 0 -3px 0 rgba(0, 0, 0, 0.25); }
+.cab-btn:active .cab-cap { transform: translateY(3px); box-shadow: 0 1px 0 rgba(0, 0, 0, 0.45); }
+.cab-btn:focus-visible { outline: none; }
+.cab-btn:focus-visible .cab-cap { outline: 3px solid #ffffff; outline-offset: 3px; }
+.cab-btn.go { --cap: #4fd18b; }
+.cab-btn.back { --cap: #efbd72; }
+.cab-btn.exit { --cap: #ef6b7a; }
+.cab-keys { margin: 8px 4px 0; font: 600 12px/1.4 'Segoe UI', system-ui, sans-serif; color: #d9d0f5; text-align: center; }
+.cab-coin { display: flex; justify-content: center; margin-top: 8px; }
+.cab-coin > span { padding: 5px 14px; border-radius: 6px; background: #1b1530; color: #f7cd50; font: 800 12px Consolas, 'Courier New', monospace; letter-spacing: 0.2em; box-shadow: inset 0 0 0 2px #6b56a8; }
+.cab-menu { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 4% 6%; overflow: auto; background: radial-gradient(ellipse at top, #1c2541, #0b1020 70%); color: #e8ecf2; }
+.cab-title { margin: 0 0 3%; text-align: center; font: 900 22px/1.1 Consolas, 'Courier New', monospace; letter-spacing: 0.25em; color: #f7cd50; text-shadow: 0 0 10px rgba(247, 205, 80, 0.6); }
+.cab-list { display: grid; gap: 4px; margin: 0; padding: 0; list-style: none; }
+.cab-pick { display: flex; align-items: center; gap: 10px; width: 100%; padding: 5px 8px; border: 2px solid transparent; border-radius: 8px; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.cab-pick::before { content: '▶'; width: 12px; flex: none; color: transparent; font-size: 12px; }
+.cab-pick:hover, .cab-pick:focus { border-color: #69bfe9; background: rgba(105, 191, 233, 0.12); outline: none; }
+.cab-pick:focus::before { color: #f7cd50; }
+.cab-icon { width: 56px; height: 42px; flex: none; border-radius: 4px; box-shadow: 0 0 0 1px #3a4a6b; }
+.cab-pick-text { display: grid; min-width: 0; }
+.cab-pick-text > b { font: 800 15px/1.2 Consolas, 'Courier New', monospace; letter-spacing: 0.08em; text-transform: uppercase; color: #ffffff; }
+.cab-pick-text > span { font-size: 12px; line-height: 1.3; color: #9fb0c8; }
+.cab-pick-text > .cab-best { color: #4fd18b; }
+.cab-hint { margin: auto 0 0; padding-top: 2%; text-align: center; font: 700 12px Consolas, 'Courier New', monospace; letter-spacing: 0.1em; color: #9fb0c8; animation: cab-blink 1.2s steps(2) infinite; }
+@keyframes cab-blink { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) { .cab-hint { animation: none; } }
+
+/* The kitchen's vending machine (office.js openVending): cans behind glass, a display and a coin slot. */
+.sheet-box.vend-box { width: min(460px, calc(100vw - 32px)); padding: 0; background: transparent; box-shadow: none; }
+.vend-box > h2 { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.vend-box > .sheet-foot { display: none; }
+.vend { padding: 12px 14px 14px; border-radius: 16px 16px 8px 8px; background: linear-gradient(180deg, #608cad, #3f6688); color: #f2f7fb; box-shadow: inset 0 0 0 4px #2c4a63, 0 18px 40px rgba(0, 0, 0, 0.45); }
+.vend-top { display: grid; justify-items: center; gap: 2px; margin-bottom: 10px; padding: 8px; border-radius: 10px; background: linear-gradient(180deg, #1d2330, #11151d); box-shadow: inset 0 0 0 2px #7be36b, 0 0 14px rgba(123, 227, 107, 0.45); }
+.vend-brand { font: 900 24px/1 Consolas, 'Courier New', monospace; letter-spacing: 0.32em; text-indent: 0.32em; color: #7be36b; text-shadow: 0 0 8px rgba(123, 227, 107, 0.8); }
+.vend-sub { font: 700 12px/1.3 'Segoe UI', system-ui, sans-serif; letter-spacing: 0.08em; color: #d4eefa; }
+.vend-body { display: grid; grid-template-columns: 1fr 150px; gap: 10px; }
+.vend-glass { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px 6px; align-content: center; padding: 12px 10px; border-radius: 8px; background: linear-gradient(135deg, rgba(217, 234, 245, 0.95), rgba(170, 205, 228, 0.85)); box-shadow: inset 0 0 0 3px #2c4a63; }
+.vend-can { display: block; justify-self: center; width: 18px; height: 30px; border-radius: 4px; background: linear-gradient(180deg, #1d2330 0 30%, var(--band) 30% 52%, #1d2330 52%); box-shadow: inset 0 3px 0 #9aa1a8, 0 2px 0 rgba(0, 0, 0, 0.25); }
+.vend-can.c0 { --band: #7be36b; } .vend-can.c1 { --band: #f7cd50; } .vend-can.c2 { --band: #ef6b7a; } .vend-can.c3 { --band: #69bfe9; }
+.vend-side { display: grid; gap: 8px; align-content: start; }
+.vend-screen { display: grid; gap: 2px; min-height: 64px; margin: 0; padding: 8px; border-radius: 6px; background: #0b1020; box-shadow: inset 0 0 0 2px #2c4a63; }
+.vend-screen b { font: 800 14px/1.2 Consolas, 'Courier New', monospace; letter-spacing: 0.1em; color: #7be36b; }
+.vend-screen span { font: 600 12px/1.35 'Segoe UI', system-ui, sans-serif; color: #cfd8e3; }
+.vend-coin { display: grid; justify-items: center; gap: 6px; padding: 10px 8px; border: 0; border-radius: 8px; background: #2c4a63; color: #ffffff; font: 700 13px/1.25 'Segoe UI', system-ui, sans-serif; cursor: pointer; box-shadow: inset 0 0 0 2px #9ab6c7; }
+.vend-coin:hover { background: #355a78; }
+.vend-coin:focus-visible { outline: 3px solid #f7cd50; outline-offset: 2px; }
+.vend-coin:disabled { cursor: progress; }
+.vend-slot { position: relative; width: 12px; height: 34px; border-radius: 6px; background: #0b1020; box-shadow: inset 0 0 0 2px #9ab6c7; }
+.vend-slot::after { content: ''; position: absolute; left: -12px; top: -26px; width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3c4, #e0ad1c 60%); box-shadow: inset 0 0 0 2px #b8860b; opacity: 0; }
+.vend-coin.dropping .vend-slot::after { animation: vend-coin 0.6s ease-in forwards; }
+@keyframes vend-coin { 0% { opacity: 1; transform: translateY(-12px) scaleX(1); } 70% { opacity: 1; transform: translateY(14px) scaleX(0.25); } 100% { opacity: 0; transform: translateY(20px) scaleX(0.1); } }
+.vend-balance { margin: 0; font: 600 12px/1.3 'Segoe UI', system-ui, sans-serif; color: #e5eef5; }
+.vend-tray { display: flex; justify-content: center; gap: 10px; min-height: 40px; margin-top: 10px; padding: 5px; border-radius: 6px; background: #1d2330; box-shadow: inset 0 4px 8px rgba(0, 0, 0, 0.6); }
+.vend-can.out { transform: rotate(90deg); animation: vend-drop 0.5s ease-in both; }
+@keyframes vend-drop { from { opacity: 0; transform: translateY(-50px) rotate(0deg); } to { opacity: 1; transform: translateY(0) rotate(90deg); } }
+.vend-note { margin: 10px 2px 0; font: 600 12px/1.4 'Segoe UI', system-ui, sans-serif; color: #e5eef5; }
+.vend-foot { display: flex; justify-content: flex-end; margin-top: 10px; }
+@media (prefers-reduced-motion: reduce) { .vend-coin.dropping .vend-slot::after, .vend-can.out { animation: none; } }
