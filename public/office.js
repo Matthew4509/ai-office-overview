@@ -273,6 +273,8 @@
     const table = world.rooms.boardroom.table;
     const atDesk = ['typing', 'researching'].includes(s.doing) || (s.doing === 'thinking' && (!longThink || !table)) || (s.doing === 'resting' && idle < SIT_IDLE);
     if (p.leaving) return { key: 'gone', x: GONE[0], y: GONE[1], face: 'west', area: 'gone' };
+    // On an energy drink nobody with nothing to do stays put, not even off the beach towels: they dash about.
+    if (buzzing(p) && ['resting', 'towel', 'needs'].includes(s.doing)) return energyRun(p);
     if (s.doing === 'towel') {
       // A favourite gone home: their own towel on the sand (past ten, the row is shared a little to the side).
       const i = towelers().findIndex((x) => x.id === s.id);
@@ -366,6 +368,23 @@
     const r = p.rest;
     return { key: `rest:${r.id}`, x: r.x + ((p.seed % 5) - 2) * 10, y: r.y + ((p.seed >> 3) % 3) * 6, face: r.face, area: r.area, rest: r };
   }
+
+  /** Dashing about on an energy drink: a spot somewhere in the office or on the beach, and as soon as they get there,
+   * the next one (never the same twice running). Rooms still locked are left out. */
+  function energyRun(p) {
+    const spots = [...PIZZA, ...STRETCH, ...DECK, ...VOLLEY, ...TOWELS, ...REST.filter((r) => world.rooms.rest.includes(r.id)).map((r) => [r.x, r.y]),
+      ...(lockedRoom(ROOMS[1]) ? [] : STANDING)];
+    const there = p.run && p.targetKey === p.run.key && !p.path.length;
+    if (!p.run || there) {
+      let i = Math.floor(Math.random() * spots.length);
+      if (i === p.run?.i) i = (i + 1 + Math.floor(Math.random() * (spots.length - 1))) % spots.length;
+      const n = (p.run?.n ?? 0) + 1;
+      p.run = { n, i, key: `run:${n}`, x: spots[i][0], y: spots[i][1] };
+      if (there && Math.random() < 0.3) say(p, DASH_LINES[Math.floor(Math.random() * DASH_LINES.length)], 1.5);
+    }
+    return { key: p.run.key, x: p.run.x, y: p.run.y, face: 'south', area: 'run' };
+  }
+  const DASH_LINES = ['Lap two!', 'Beach! Now kitchen!', 'Can\'t stop, won\'t stop!', 'Beep beep, coming through!', 'Last one there is a bug!', 'Sprint!'];
 
   /** Waiting for a reply: after VISIT_AFTER seconds they go and try something bought (a lounge spot, a free deck chair)
    * and stay there, enjoying it, until the reply comes (a reply ends the visit and they hurry back to the desk), rather
@@ -853,7 +872,7 @@
     }
     for (const p of world.people.values()) {
       if (p.path.length) {
-        if (move(p, dt, (['desk', 'boardroom', 'needs', 'party'].includes(p.target?.area) ? HURRY : WALK) * (buzzing(p) ? ENERGY_PACE : 1))) arrived(p);
+        if (move(p, dt, (['desk', 'boardroom', 'needs', 'party', 'run'].includes(p.target?.area) ? HURRY : WALK) * (buzzing(p) ? ENERGY_PACE : 1))) arrived(p);
         continue;
       }
       if (p.target?.rest && world.time > p.restUntil) retarget(p);
@@ -1310,6 +1329,7 @@
       const lead = thinkersNow()[0]?.name ?? 'someone';
       return p.path.length ? `Off to the meeting room to help ${lead} think` : `Helping ${lead} think`;
     }
+    if (t?.area === 'run') return s.doing === 'needs' ? `Needs you: ${s.doingText} (dashing about on an energy drink)` : 'On an energy drink: dashing about the office';
     const thinkHere = s.doing === 'thinking' && !world.rooms.boardroom.table;
     if (p.path.length && !p.out) {
       if (t?.waiting) return `Off to try ${t.visit} while waiting for you`;
@@ -2591,6 +2611,9 @@
       if (!p.hyperUntil || p.leaving || p.out) continue;
       if (world.time >= p.hyperUntil) {
         p.hyperUntil = 0;
+        // Worn off: back to what they were doing (the desk, the kitchen, the towel).
+        p.run = null;
+        p.targetKey = '';
         say(p, CRASH_LINES[(p.seed + (world.noticed || 0)) % CRASH_LINES.length], 3);
         continue;
       }
@@ -2604,6 +2627,7 @@
   function drinkUp() {
     present().forEach((p, i) => {
       p.hyperUntil = world.time + ENERGY_SECONDS;
+      p.targetKey = ''; // up and off at once
       p.hyperNext = world.time + 2 + Math.random() * 1.5;
       say(p, SIP_LINES[(p.seed + i) % SIP_LINES.length], 2);
       thank(p);
