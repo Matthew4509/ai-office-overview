@@ -1,5 +1,5 @@
-// The staff's look: the little people drawn in the office and their round pictures. Copied from TOMLIN's
-// public/look.js (the drawing, the made-up looks) with TOMLIN's list of parts and colours (src/look.ts) built in.
+// The staff's look: the little people drawn in the office and their round pictures (the drawing, the made-up looks
+// and the list of parts and colours).
 // Each person (a seat: folder + number) gets a made-up look seeded by the seat, so they look the same every time.
 'use strict';
 
@@ -339,9 +339,10 @@
 
   /**
    * face: 'south' (towards you), 'north' (back of the head), 'east' or 'west'. opts.walk bobs the step, opts.time is the
-   * clock in seconds, opts.seed offsets the step so two walkers do not move as one.
+   * clock in seconds, opts.seed offsets the step so two walkers do not move as one. opts.wave (facing you only) raises
+   * the right hand and waves it: a thank-you.
    */
-  function sprite(c, look, x, y, face = 'south', { walk = false, time = 0, seed = 0 } = {}) {
+  function sprite(c, look, x, y, face = 'south', { walk = false, time = 0, seed = 0, wave = false } = {}) {
     const skin = colourOf('skin', look.skin);
     const hair = colourOf('hairColour', look.hairColour);
     const top = colourOf('top', look.top);
@@ -356,7 +357,12 @@
     const w = look.gender === 'woman' ? 18 : look.gender === 'man' ? 22 : 20;
     box(c, x - w / 2, y - 2, w, 20, 7, top);
     oval(c, x - w / 2 - 3, y + 5, 4, 5, skin);
-    oval(c, x + w / 2 + 3, y + 5, 4, 5, skin);
+    if (wave && face === 'south') {
+      // The arm up from the shoulder, the hand swinging side to side above it.
+      const hx = x + w / 2 + 9 + Math.sin(time * 10 + seed) * 4;
+      line(c, x + w / 2 - 2, y + 2, hx, y - 18, top, 7);
+      oval(c, hx, y - 21, 5, 5, skin);
+    } else oval(c, x + w / 2 + 3, y + 5, 4, 5, skin);
     if (face === 'north') spriteBack(c, look, x, y, hair, skin);
     else if (face === 'east' || face === 'west') spriteSide(c, look, x, y, face === 'east' ? 1 : -1, hair, skin);
     else spriteFront(c, look, x, y, hair, skin);
@@ -567,7 +573,7 @@
     return pictures.get(key);
   }
 
-  /** A small element maker for the editor (TOMLIN's editor uses app.js's el). */
+  /** A small element maker for the editor. */
   function el(tag, props = {}, ...kids) {
     const n = document.createElement(tag);
     for (const [k, v] of Object.entries(props)) {
@@ -581,7 +587,7 @@
     return n;
   }
 
-  // ---- The editor (from TOMLIN's look.js) ----
+  // ---- The editor ----
 
   /** A canvas drawn sharp on a high-density screen, `css` pixels square on the page. */
   function sharpCanvas(css, cls) {
@@ -748,7 +754,7 @@
     return wrap;
   }
 
-  // ---- AI Office Overview: one look per seat ----
+  // ---- One look per seat ----
   options = OPTIONS;
   const looks = new Map();
   /**

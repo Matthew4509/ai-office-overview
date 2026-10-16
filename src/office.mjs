@@ -15,8 +15,32 @@ const WAITING_DAYS = 7;
 /** Bump when the summary's shape changes: the cache is then read again from the start. */
 const CACHE_VERSION = 5;
 
+/** How long a hook event is kept over a restart (older ones no longer change anyone's state). */
+const HOOK_KEEP_MS = 24 * 3600 * 1000;
+
 function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
+}
+
+/**
+ * One of the office's own files (data/). Missing: the fallback. There but unreadable, or not an object: copied aside
+ * first (name.damaged-<time>.json), so the next save cannot wipe deleted threads, nicknames or the purse start.
+ */
+function readKept(file, fallback) {
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch (e) {
+    if (e.code === 'ENOENT') return fallback;
+    text = null;
+  }
+  if (text !== null) {
+    try {
+      const data = JSON.parse(text);
+      if (data && typeof data === 'object' && !Array.isArray(data)) return data;
+    } catch { /* copied aside below */ }
+  }
+  const aside = `${file.replace(/\.json$/, '')}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+  try { fs.copyFileSync(file, aside); console.error(`[data] ${path.basename(file)} could not be read: kept a copy as ${path.basename(aside)} and started it empty.`); } catch { /* nothing to keep */ }
+  return fallback;
 }
 
 /** Writes beside the file, then swaps it in, so a crash never leaves half a file. */
@@ -36,20 +60,26 @@ export class Office {
     this.transcriptsDir = o.transcriptsDir || path.join(os.homedir(), '.claude', 'projects');
     this.now = o.now || (() => Date.now());
     this.file = (n) => path.join(this.dataDir, n);
-    this.settings = readJson(this.file('settings.json'), {});
+    this.settings = readKept(this.file('settings.json'), {});
     if (!this.settings.openedAt) {
       this.settings.openedAt = new Date(this.now()).toISOString();
       this.saveSettings();
     }
     if (!this.settings.quietMinutes) this.settings.quietMinutes = 60;
-    this.seatNames = readJson(this.file('seats.json'), {});
-    this.ledger = readJson(this.file('ledger.json'), { threads: {} });
-    this.done = readJson(this.file('done.json'), {});
+    this.seatNames = readKept(this.file('seats.json'), {});
+    this.ledger = readKept(this.file('ledger.json'), { threads: {} });
+    if (!this.ledger.threads || typeof this.ledger.threads !== 'object') this.ledger.threads = {};
+    this.done = readKept(this.file('done.json'), {});
     const cache = readJson(this.file('cache.json'), {});
     /** file path -> { offset, size, mtime, t } */
     this.files = cache.version === CACHE_VERSION && cache.since === this.settings.openedAt ? cache.files || {} : {};
-    /** thread id -> newest hook event { kind, words, at } (advanced setup). */
+    /** thread id -> newest hook event { kind, words, at } (advanced setup). Kept in hooks.json: a permission prompt
+     * leaves no line in the transcript, so without it a restart would forget who is waiting for your permission. */
     this.hooks = {};
+    const cut = this.now() - HOOK_KEEP_MS;
+    for (const [id, h] of Object.entries(readKept(this.file('hooks.json'), {}))) {
+      if (h && typeof h.kind === 'string' && Number(h.at) > cut) this.hooks[id] = { kind: h.kind, words: String(h.words || ''), at: Number(h.at) };
+    }
     this.dirty = false;
     /** Links that open a thread in the AI desktop app (the open-thread button). */
     this.appLinks = o.appLinks || new AppLinks();
@@ -137,7 +167,10 @@ export class Office {
   /** Remembers a hook event (advanced setup) for a thread. */
   hook(id, kind, words = '') {
     if (!id) return;
-    this.hooks[id] = { kind, words, at: this.now() };
+    const now = this.now();
+    this.hooks[id] = { kind, words, at: now };
+    for (const [k, h] of Object.entries(this.hooks)) if (h.at <= now - HOOK_KEEP_MS) delete this.hooks[k];
+    writeJson(this.file('hooks.json'), this.hooks);
   }
 
   setNickname(folder, seat, nick) {
@@ -263,6 +296,8 @@ export class Office {
         outSince: t.outSince + counted.reduce((a, h) => a + h.outSince, 0),
         outByDay,
         asked: t.asked,
+        snag: t.snag || null,
+        event: t.event || null,
         steps: t.steps,
         msgs: t.msgs || [],
         helpers: helpers.length,
@@ -319,6 +354,8 @@ export class Office {
         p.state = x.state;
         p.words = x.words;
         p.since = x.since;
+        p.snag = x.snag;
+        p.event = x.event;
         p.thread = { id, open: this.appLinks.open(id), title: x.title, startedAt: x.startedAt, lastAt: x.lastAt, asked: x.asked, steps: x.steps, helpers: x.helpers, out: x.out };
       }
     }

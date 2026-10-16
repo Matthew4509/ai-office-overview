@@ -127,3 +127,20 @@ test('default names: folder, then folder 2; the projects folder is Consultant', 
   assert.equal(defaultName('', 1), 'Consultant');
   assert.equal(defaultName('', 3), 'Consultant 3');
 });
+
+test('a helper that finishes after the thread asked you something does not hide the question', () => {
+  const H = 3600000;
+  const asked = '2026-10-12T01:00:00.000Z';
+  const later = '2026-10-12T01:00:30.000Z';
+  const ms = Date.parse(later) + 5000;
+  const finished = thread({ lastAt: later, last: { kind: 'done', at: later } });
+  const boss = thread({ lastAt: asked, last: { kind: 'done', at: asked }, asked: 'Which one?' });
+  assert.deepEqual(stateOf(boss, ms, H, [finished]), { state: 'needs', words: 'Asked you something', since: Date.parse(asked) });
+  const asking = thread({ lastAt: asked, last: { kind: 'tool', tool: 'AskUserQuestion', at: asked } });
+  assert.equal(stateOf(asking, ms, H, [finished]).state, 'needs');
+  const plain = thread({ lastAt: asked, last: { kind: 'done', at: asked } });
+  assert.equal(stateOf(plain, ms, H, [finished]).words, 'Finished');
+  // Still waiting for its helper (the thread's own last step is the helper's job): the helper is finishing up.
+  const waiting = thread({ lastAt: asked, last: { kind: 'tool', tool: 'Agent', words: 'Handing a job to a helper', at: asked } });
+  assert.equal(stateOf(waiting, ms, H, [finished]).words, 'A helper is finishing up');
+});

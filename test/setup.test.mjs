@@ -53,7 +53,7 @@ test('advanced setup adds its three hooks beside the ones already there, keeps a
 test('hooks an earlier version wrote, under its old mark, still count as ours: on, replaced, and taken off', () => {
   const h = tempHome();
   try {
-    const old = (ev) => ({ hooks: [{ type: 'command', command: 'node "C:/x/old office/hook.mjs" 8860 --old-office-hook', timeout: 3 }] });
+    const old = (ev) => ({ hooks: [{ type: 'command', command: 'node "C:/x/old office/hook.mjs" 8860 --claude-office-hook', timeout: 3 }] });
     const file = withSettings(h, { ...BEEPS, hooks: { ...BEEPS.hooks, Stop: [...BEEPS.hooks.Stop, old()], Notification: [...BEEPS.hooks.Notification, old()], UserPromptSubmit: [old()] } });
     const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
     assert.equal(status(office).mode, 'advanced');
@@ -64,6 +64,42 @@ test('hooks an earlier version wrote, under its old mark, still count as ours: o
     fs.writeFileSync(file, JSON.stringify({ ...BEEPS, hooks: { ...BEEPS.hooks, Stop: [...BEEPS.hooks.Stop, old()] } }));
     apply(office, { advanced: false }, { port: 8860, hookScript: 'x' });
     assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), BEEPS, 'the old one taken off, the beeps kept');
+  } finally {
+    delete process.env.AI_OFFICE_SETTINGS;
+    h.done();
+  }
+});
+
+// Another program's hooks that look like ours (a hook.mjs, a port, a --…-hook mark): AI Head Office Overview's, and two
+// made-up ones whose marks only contain ours.
+const OTHERS = [
+  'node "C:/x/ai head office overview/office/hook.mjs" 8870 --ai-head-office-hook',
+  'node "C:/x/other/hook.mjs" 9000 --my-claude-office-hook',
+  'node "C:/x/other/hook.mjs" 9000 --not-ai-office-overview-hook',
+];
+const othersOn = () => ({
+  ...BEEPS,
+  hooks: {
+    ...BEEPS.hooks,
+    Stop: [...BEEPS.hooks.Stop, ...OTHERS.map((command) => ({ hooks: [{ type: 'command', command, timeout: 3 }] }))],
+    UserPromptSubmit: OTHERS.map((command) => ({ hooks: [{ type: 'command', command, timeout: 3 }] })),
+  },
+});
+
+test('another program\'s hooks are not ours: they never count as advanced, and turning it on or off keeps them', () => {
+  const h = tempHome();
+  try {
+    const file = withSettings(h, othersOn());
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    assert.equal(status(office).mode, 'easy', 'only the other programs\' hooks are there');
+    const on = apply(office, { advanced: true }, { port: 8860, hookScript: 'C:\\x\\ai office overview\\hook.mjs' });
+    assert.equal(on.status.mode, 'advanced');
+    const now = JSON.parse(fs.readFileSync(file, 'utf8'));
+    assert.deepEqual(now.hooks.Stop.slice(0, 4), othersOn().hooks.Stop, 'the beep and the other programs\' hooks kept, in place');
+    assert.equal(now.hooks.Stop.length, 5);
+    assert.equal(now.hooks.UserPromptSubmit.length, 4);
+    apply(office, { advanced: false }, { port: 8860, hookScript: 'x' });
+    assert.deepEqual(JSON.parse(fs.readFileSync(file, 'utf8')), othersOn(), 'back exactly as it was: only ours taken off');
   } finally {
     delete process.env.AI_OFFICE_SETTINGS;
     h.done();

@@ -49,7 +49,50 @@ export function emptyThread(id, since = '') {
     msgs: [],
     /** Did this thread do real work (a write, or a command that did more than look)? Used for helpers. */
     worked: false,
+    /** The last snag, for the staff's quips: { at, kind: 'failed' (a command or step that ended in an error) | 'bug'
+     * (the AI's own words say it found a bug) }, or null. */
+    snag: null,
+    /** When the last few snags happened (newest last), to count a run of them: see snagAt. */
+    snagTimes: [],
+    /** The last thing worth a word in the office chat, measured from the thread: { at, kind, file?, n? } (see eventAt).
+     * Kinds: tests-passed, tests-failed, commit, push, again (the same file edited a 3rd, 6th or 10th time), stopped. */
+    event: null,
+    /** Steps waiting for their result, by tool id: 'test', 'commit' or 'push'. */
+    pending: {},
+    /** How many times each file was edited (by full path). */
+    edits: {},
   };
+}
+
+/** The AI saying it found a bug or its cause ("Found the bug", "the root cause is"). Plain words only, so a quip
+ * follows a real find, not every mention of the word. */
+const BUG_FOUND = /\b(found (the|a|another) (bug|problem|cause)|the bug (is|was)|that'?s the bug|root cause|the cause (is|was)|caught (a|the) bug|a bug in)\b/i;
+/** A big bug: this many snags within SNAG_WINDOW. */
+export const BIG_BUG = 3;
+const SNAG_WINDOW = 15 * 60e3;
+/** A snag at `at`: kept with `run`, how many snags the thread has hit within the last 15 minutes (this one too). */
+function snagAt(t, at, kind) {
+  t.snagTimes = [...(t.snagTimes || []), at].slice(-10);
+  const ms = Date.parse(at);
+  const run = t.snagTimes.filter((x) => ms - Date.parse(x) <= SNAG_WINDOW && Date.parse(x) <= ms).length;
+  t.snag = { at, kind, run };
+}
+/** A shell step the chat may react to once its result is in: a test run, a commit, a push (from its words only). */
+function watchedStep(input) {
+  const cmd = String(input?.command || '');
+  const words = `${input?.description || ''} ${cmd}`;
+  if (/\bgit\b[^\n|;&]*\bcommit\b/.test(cmd)) return 'commit';
+  if (/\bgit\b[^\n|;&]*\bpush\b/.test(cmd)) return 'push';
+  if (/\b(tests?|test-all|spec|pytest|jest|vitest|mocha|phpunit)\b/i.test(words)) return 'test';
+  return null;
+}
+/** A measured event for the chat: only its kind, a file's short name and a count are kept, never text from the thread. */
+function eventAt(t, at, kind, more = {}) {
+  t.event = { at, kind, ...more };
+}
+/** A tool result that is an error, but not one the person chose (a step they declined or stopped). */
+function failedResult(c) {
+  return c.some((x) => x && x.type === 'tool_result' && x.is_error && !/doesn't want to proceed|was rejected|interrupted by user|user declined/i.test(textOf(x.content)));
 }
 
 /** True when every part of a shell command only looks (ls, cat, grep, git status, ...). */
@@ -165,12 +208,20 @@ export function addLine(t, l) {
     if (isResult) {
       t.last = { kind: 'result', at };
       t.asked = '';
+      if (failedResult(c)) snagAt(t, at, 'failed');
+      for (const x of c) {
+        const what = x && x.type === 'tool_result' && t.pending?.[x.tool_use_id];
+        if (!what) continue;
+        delete t.pending[x.tool_use_id];
+        if (what === 'test') eventAt(t, at, x.is_error ? 'tests-failed' : 'tests-passed');
+        else if (!x.is_error) eventAt(t, at, what);
+      }
       return;
     }
     if (l.isMeta) return;
     const words = textOf(c).trim();
     if (!words) return;
-    if (/^\[Request interrupted/i.test(words)) { t.last = { kind: 'stopped', at }; return; }
+    if (/^\[Request interrupted/i.test(words)) { t.last = { kind: 'stopped', at }; eventAt(t, at, 'stopped'); return; }
     if (/^<(command-|local-command|system-reminder)/.test(words)) return;
     if (!t.firstPrompt) t.firstPrompt = words.slice(0, 2000);
     t.last = { kind: 'prompt', at };
@@ -208,8 +259,19 @@ export function addLine(t, l) {
       const words = wordsFor(b.name, input);
       t.last = { kind: 'tool', at, tool: b.name, words };
       pushStep(t, at, words);
+      const watch = SHELLS.has(b.name) && b.id ? watchedStep(input) : null;
+      if (watch) {
+        t.pending = { ...(t.pending || {}), [b.id]: watch };
+        const ids = Object.keys(t.pending);
+        if (ids.length > 20) delete t.pending[ids[0]];
+      }
       if (WRITERS.has(b.name)) {
         const p = input.file_path || input.notebook_path;
+        if (p) {
+          t.edits = t.edits || {};
+          const n = (t.edits[p] = (t.edits[p] || 0) + 1);
+          if ([3, 6, 10].includes(n)) eventAt(t, at, 'again', { file: String(p).split(/[\\/]/).pop().slice(0, 60), n });
+        }
         if (p && !t.wrote.includes(p)) t.wrote.push(p);
         t.worked = true;
       } else if (SHELLS.has(b.name) && input.command && !onlyLooks(input.command)) {
@@ -223,6 +285,7 @@ export function addLine(t, l) {
       }
     } else if (b.type === 'text' && b.text) {
       pushMsg(t, at, 'ai', b.text);
+      if (BUG_FOUND.test(b.text)) snagAt(t, at, 'bug');
       if (ended) {
         t.last = { kind: 'done', at };
         t.asked = questionIn(b.text);
@@ -241,30 +304,41 @@ export function addLine(t, l) {
 
 /**
  * Reads what has been added to a file since `offset` and feeds whole lines to the summary.
- * Answers the new offset (a half-written last line is left for next time).
+ * `also` ({ from, fn }): a second reader of the same lines (the token counts), fed every line from its own `from`
+ * on, so a file is read and each line parsed once for both. Answers the new offset (a half-written last line is left
+ * for next time).
  */
-export function readFrom(file, t, offset = 0) {
+export function readFrom(file, t, offset = 0, also = null) {
   let fd;
   try { fd = fs.openSync(file, 'r'); } catch { return offset; }
   try {
     const size = fs.fstatSync(fd).size;
     if (size < offset) offset = 0; // the file was replaced: read it again from the start
+    const alsoFrom = also ? Math.min(also.from, size) : Infinity;
     const CHUNK = 4 * 1024 * 1024;
-    let pos = offset;
+    let pos = Math.min(offset, alsoFrom);
     let carry = Buffer.alloc(0);
     while (pos < size) {
       const buf = Buffer.alloc(Math.min(CHUNK, size - pos));
       const n = fs.readSync(fd, buf, 0, buf.length, pos);
       if (n <= 0) break;
+      const base = pos - carry.length; // where `data` starts in the file
       pos += n;
       let data = carry.length ? Buffer.concat([carry, buf.subarray(0, n)]) : buf.subarray(0, n);
       let start = 0;
       for (let i = 0; i < data.length; i++) {
         if (data[i] !== 10) continue;
+        const at = base + start;
         const line = data.toString('utf8', start, i).trim();
         start = i + 1;
         if (!line) continue;
-        try { addLine(t, JSON.parse(line)); } catch { /* a damaged line is skipped */ }
+        const mine = at >= offset, theirs = at >= alsoFrom;
+        if (!mine && !theirs) continue;
+        try {
+          const o = JSON.parse(line);
+          if (mine) addLine(t, o);
+          if (theirs) also.fn(o);
+        } catch { /* a damaged line is skipped */ }
       }
       carry = Buffer.from(data.subarray(start));
     }

@@ -1,5 +1,5 @@
-// The shop: TOMLIN's office rewards (src/home.ts SHOP, purseOf, buy, roomsOf) at this office's scale, TOMLIN's prices x 20
-// (scaled to the output tokens a day of AI coding work writes). The purse is every output token written since the
+// The shop: the office's rewards, priced
+// for the output tokens a day of AI coding work writes. The purse is every output token written since the
 // office opened, less what was spent. What is bought is kept in data/office.json, oldest first.
 
 import fs from 'node:fs';
@@ -9,6 +9,8 @@ export const SHOP = [
   { id: 'coffee', name: 'Coffee round', the: 'the coffee round', price: 200_000, keeps: false, most: 0, room: 'treats' },
   { id: 'donuts', name: 'Box of donuts', the: 'the box of donuts', price: 500_000, keeps: false, most: 0, room: 'treats' },
   { id: 'sandwiches', name: 'Sandwich platter', the: 'the sandwich platter', price: 400_000, keeps: false, most: 0, room: 'treats' },
+  { id: 'rocks', name: 'Pet rocks', the: 'the pet rocks', price: 200_000, keeps: true, most: 1, room: 'desks' },
+  { id: 'ducks', name: 'Rubber ducks', the: 'the rubber ducks', price: 300_000, keeps: true, most: 1, room: 'desks' },
   { id: 'boardroom_key', name: 'Unlock the meeting room', the: 'the meeting room key', price: 20_000_000, keeps: true, most: 1, room: 'boardroom', unlocks: 'boardroom' },
   { id: 'lounge_key', name: 'Unlock the lounge', the: 'the lounge key', price: 10_000_000, keeps: true, most: 1, room: 'lounge', unlocks: 'lounge' },
   { id: 'table', name: 'Meeting room table', the: 'the meeting room table', price: 1_500_000, keeps: true, most: 1, room: 'boardroom' },
@@ -25,7 +27,7 @@ export const SHOP = [
   { id: 'volleyball', name: 'Beach volleyball set', the: 'the beach volleyball set', price: 2_000_000, keeps: true, most: 1, room: 'beach' },
 ];
 
-const PLACE = { treats: 'the kitchen', boardroom: 'the meeting room', lounge: 'the lounge', beach: 'on the beach' };
+const PLACE = { desks: 'on the desks', treats: 'the kitchen', boardroom: 'the meeting room', lounge: 'the lounge', beach: 'on the beach' };
 const LOUNGE_SPOTS = { nap: 'armchair', library: 'bookcase', chat: 'sofa', tv: 'tv', treadmill: 'gym', weights: 'gym', arcade: 'arcade' };
 const countOf = (bought, id) => bought.filter((b) => b.item === id).length;
 const n = (x) => Number(x || 0).toLocaleString('en-GB');
@@ -46,7 +48,11 @@ function fileOf(office) { return path.join(office.dataDir, 'office.json'); }
 /** Purchases as kept, oldest first; unknown items dropped. */
 export function boughtOf(office) {
   let raw = {};
-  try { raw = JSON.parse(fs.readFileSync(fileOf(office), 'utf8')); } catch { raw = {}; }
+  try { raw = JSON.parse(fs.readFileSync(fileOf(office), 'utf8')); } catch (e) {
+    raw = {};
+    // There but unreadable: copied aside first, so the next purchase cannot wipe what was bought before.
+    if (e.code !== 'ENOENT') try { fs.copyFileSync(fileOf(office), fileOf(office).replace(/\.json$/, '') + '.damaged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'); } catch {}
+  }
   const list = Array.isArray(raw.bought) ? raw.bought : [];
   return list.filter((b) => b && SHOP.some((i) => i.id === b.item)).map((b) => ({ item: b.item, price: Math.max(0, Math.round(Number(b.price) || 0)), at: String(b.at || '').slice(0, 40) }));
 }
@@ -55,6 +61,24 @@ export function purseOf(earned, bought) {
   const spent = bought.reduce((a, b) => a + b.price, 0);
   const e = Math.max(0, Math.round(earned) || 0);
   return { earned: e, spent, left: Math.max(0, e - spent) };
+}
+
+/** The treats that count for "taking care of the team" (pizza is free, so it is not kept). */
+const TREATS = ['coffee', 'donuts', 'sandwiches'];
+/** Everything done: every room unlocked, every piece bought as many times as the office holds, and the team treated
+ * to each treat at least once. */
+function allDone(bought) {
+  const locked = locksOf(bought);
+  return Object.values(locked).every((l) => !l)
+    && SHOP.filter((i) => i.keeps && !i.unlocks).every((i) => countOf(bought, i.id) >= i.most)
+    && TREATS.every((id) => countOf(bought, id) > 0);
+}
+/** The trophy case (World's Best Boss): earned with the purchase that finished everything, and dated by it; null until
+ * then. It is never sold: it comes by itself. */
+export function trophyOf(bought) {
+  if (!allDone(bought)) return null;
+  for (let k = 1; k <= bought.length; k++) if (allDone(bought.slice(0, k))) return { at: bought[k - 1].at };
+  return null;
 }
 
 export function roomsOf(bought) {
@@ -67,6 +91,9 @@ export function roomsOf(bought) {
     away: lounge.length ? lounge : ['window'],
     deckchairs: Math.min(6, countOf(bought, 'deckchair')),
     volleyball: has('volleyball'),
+    ducks: has('ducks'),
+    rocks: has('rocks'),
+    trophy: trophyOf(bought),
     locked: locksOf(bought),
   };
 }

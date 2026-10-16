@@ -205,3 +205,46 @@ test('Answered covers the need it was pressed for: a permission prompt that come
     h.done();
   }
 });
+
+test('a permission prompt from a hook is still waiting after the office restarts', () => {
+  const h = tempHome();
+  try {
+    lines('t1').prompt(0, 'go').tool(1, 'Write', { file_path: OFFICE_FILE }).write(file(h, 't1'));
+    const first = setup(h, 2);
+    first.office.scan();
+    onHook(first.office, { event: 'Notification', session: 't1', message: 'Claude needs your permission to use Bash' });
+    first.office.save();
+    const again = setup(h, 3);
+    again.office.scan();
+    const s = again.office.snapshot();
+    const me = s.people.find((p) => p.folder === 'ai office overview');
+    assert.equal(me.state, 'needs');
+    assert.equal(me.words, 'Waiting for your permission');
+    assert.deepEqual(s.waiting.map((w) => w.id), ['t1']);
+  } finally {
+    h.done();
+  }
+});
+
+test('a damaged ledger, seats or settings file is copied aside before anything is written over it', () => {
+  const h = tempHome();
+  try {
+    fs.mkdirSync(h.data, { recursive: true });
+    const bad = { 'ledger.json': '{"threads": {"t1": ', 'seats.json': '{"ai office overview": {"1": {"nick": "Ma', 'settings.json': '{"openedAt": "2026-10-1' };
+    for (const [n, text] of Object.entries(bad)) fs.writeFileSync(path.join(h.data, n), text);
+    lines('t1').prompt(0, 'go').tool(1, 'Write', { file_path: OFFICE_FILE }).reply(2, 'Done.').write(file(h, 't1'));
+    const { office } = setup(h, 3);
+    office.scan();
+    office.snapshot();
+    office.save();
+    office.setNickname('ai office overview', 1, 'Pat');
+    const files = fs.readdirSync(h.data);
+    for (const [n, text] of Object.entries(bad)) {
+      const copies = files.filter((f) => f.startsWith(`${n.replace(/\.json$/, '')}.damaged-`));
+      assert.equal(copies.length, 1, `one copy of the damaged ${n}`);
+      assert.equal(fs.readFileSync(path.join(h.data, copies[0]), 'utf8'), text, `${n} kept exactly as it was`);
+    }
+  } finally {
+    h.done();
+  }
+});

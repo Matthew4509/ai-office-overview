@@ -57,8 +57,9 @@ The settings file is `~/.claude/settings.json` (Windows: `C:\Users\<name>\.claud
 7. Threads that are **already open** pick up new hooks only when they next start. Say so.
 
 ## Undoing it
-Use **Setup > Go back to easy setup**. By hand: remove every hook whose command contains `--ai-office-overview-hook` (and any
-group or event array left empty by that), and nothing else. Or restore the backup copy.
+Use **Setup > Go back to easy setup**. By hand: remove every hook whose command contains `--ai-office-overview-hook` (or the
+older `--claude-office-hook`), and any group or event array left empty by that, and nothing else. Hooks with other marks,
+such as AI Head Office Overview's `--ai-head-office-hook`, belong to other programs: leave them. Or restore the backup copy.
 
 ## What the hook does (so you can explain it)
 `hook.mjs` reads the event Claude Code gives it and sends `{ event, session, message }` to `http://127.0.0.1:<port>/api/hook`.

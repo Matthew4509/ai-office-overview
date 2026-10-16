@@ -32,9 +32,10 @@ export function hookCommand(hookScript, port) {
   return `node "${hookScript.replace(/\\/g, '/')}" ${port} --${MARK}`;
 }
 
-/** Ours: this mark, or a hook an earlier version wrote (it runs a hook.mjs with a port and its own --…-hook mark). */
-const OLDER = /hook\.mjs" \d+ --[a-z-]+-hook$/;
-const isOurs = (h) => typeof h?.command === 'string' && (h.command.includes(MARK) || OLDER.test(h.command));
+/** Every mark this office has written: today's, and the one from before the rename in 0.1.7. Only these count as ours:
+ * other programs write hooks that look the same (a hook.mjs, a port, their own --…-hook mark), and those are theirs. */
+const MARKS = [MARK, 'claude-office-hook'];
+const isOurs = (h) => typeof h?.command === 'string' && h.command.split(/\s+/).some((word) => MARKS.some((m) => word === `--${m}`));
 
 /** The AI app's settings without this office's entries (everything else exactly as it was). */
 export function withoutOurs(data) {
@@ -75,8 +76,16 @@ export function status(office) {
     root: office.root(),
     rootSet: !!office.settings.root,
     quietMinutes: office.settings.quietMinutes,
+    theme: THEMES.includes(office.settings.theme) ? office.settings.theme : '',
   };
 }
+
+/** The page's colours: auto (light from sunrise to sunset), dark, light, or "system" (follows Windows). Until one is
+ * chosen, THEME_DEFAULT: light (day). */
+export const THEMES = ['auto', 'dark', 'light', 'system'];
+export const THEME_DEFAULT = 'light';
+/** The theme the page is served in: the one chosen in Setup, or the default. */
+export const theme = (office) => (THEMES.includes(office.settings.theme) ? office.settings.theme : THEME_DEFAULT);
 
 /** Turns advanced setup on or off: { advanced: true | false }. A copy of the settings file is kept first. */
 export function apply(office, b, { port, hookScript }) {
@@ -115,8 +124,12 @@ export function onHook(office, b) {
   else if (event === 'Notification') office.hook(id, /permission/i.test(b.message) ? 'needs' : 'done', /permission/i.test(b.message) ? 'Waiting for your permission' : '');
 }
 
-/** The office's own settings: { root, quietMinutes }. */
+/** The office's own settings: { root, quietMinutes, theme }. */
 export function settings(office, b) {
+  if (b.theme !== undefined) {
+    if (!THEMES.includes(b.theme)) return { error: { fault: 'That theme is not one the office has.', reason: `It knows ${THEMES.join(', ')}.`, wayOut: 'Pick Auto, Dark, Light or Match Windows in Setup.' } };
+    office.settings.theme = b.theme;
+  }
   if (b.root !== undefined) {
     const root = String(b.root || '').trim();
     if (root) {

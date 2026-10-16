@@ -100,6 +100,16 @@
   }
   app.api = api;
 
+  /** The Thoughts chat (Setup): 'all' (work lines and the office chat), 'work' (what the threads do, and plain facts) or
+   * 'off'. Kept in this browser. */
+  app.chatMode = () => { try { const m = localStorage.getItem('ai-office-chat'); return m === 'work' || m === 'off' ? m : 'all'; } catch { return 'all'; } };
+  app.setChatMode = (m) => { try { localStorage.setItem('ai-office-chat', m); } catch { /* fine */ } window.officeView?.refresh?.(); draw(); };
+  // Under the tabs: Show names (the staff's names in the office) and PC name (the project's name above each desk's
+  // computer), both on until unticked, to see the staff better or for a screenshot. Kept in this browser only.
+  const remembered = (k) => { try { return localStorage.getItem(k) !== 'off'; } catch { return true; } };
+  app.showNames = remembered('ai-office-show-names');
+  app.showPcName = remembered('ai-office-show-pc-name');
+
   function people() {
     const all = app.data?.people || [];
     const today = new Set((app.data?.projects || []).flatMap((pr) => pr.people));
@@ -114,19 +124,38 @@
     return [...ps, ...favs];
   }
 
+  /** The projects, down the left of the office: All projects, then each project with someone in today, its name and,
+   * under it, who is doing what (an icon and a count for each state). Click one to show only that project. */
   function drawProjects() {
     const nav = document.getElementById('projects');
     const prs = app.data.projects;
-    const all = el('button', { type: 'button', class: 'chip', 'aria-pressed': String(app.project === null), onclick: () => pickProject(null) }, `All projects (${prs.length})`);
-    const chips = prs.map((pr) => el('button', {
-      type: 'button',
-      class: 'chip',
-      'aria-pressed': String(app.project === pr.folder),
-      title: `${projectName(pr.folder)}: ${pr.people.length} ${pr.people.length === 1 ? 'person' : 'people'}`,
-      onclick: () => pickProject(pr.folder),
-    }, el('b', { text: projectName(pr.folder) }), el('span', { class: 'counts' },
-      ...ORDER.filter((s) => pr[s]).map((s) => el('span', { class: `count state-${s}`, title: `${pr[s]} ${STATES[s].word.toLowerCase()}` }, `${STATES[s].icon}${pr[s]}`)))));
-    swap(nav, all, ...chips, prs.length ? null : el('span', { class: 'empty', text: 'No threads today yet.' }));
+    const row = (on, pick, name, sub, title) => el('li', {}, el('button', { type: 'button', class: 'filter-item', 'aria-pressed': String(on), title, onclick: pick },
+      el('span', { class: 'filter-name', text: name }), sub));
+    const counts = (pr) => el('span', { class: 'counts' },
+      ...ORDER.filter((s) => pr[s]).map((s) => el('span', { class: `count state-${s}`, title: `${pr[s]} ${STATES[s].word.toLowerCase()}` }, `${STATES[s].icon}${pr[s]}`)));
+    const items = [row(app.project === null, () => pickProject(null), `All projects (${prs.length})`, null, 'Show everyone in every project'),
+      ...prs.map((pr) => row(app.project === pr.folder, () => pickProject(pr.folder), projectName(pr.folder), counts(pr),
+        `${projectName(pr.folder)}: ${pr.people.length} ${pr.people.length === 1 ? 'person' : 'people'}`))];
+    swap(nav, el('h2', { id: 'filter-title', text: 'Projects' }), el('ul', { class: 'filter-list' }, ...items),
+      prs.length ? null : el('p', { class: 'empty', text: 'No threads today yet.' }));
+  }
+
+  /** One row under the tabs, above the office: Show names (the staff's names), PC name (the project's name above each
+   * desk's computer) and Show general chit-chat (the office chat: unticked, Thoughts keeps only what the threads are
+   * doing, as Work only in Setup). Shown with the office only. All three are on until unticked. */
+  function drawViewTicks() {
+    const row = document.getElementById('view-ticks');
+    if (!row) return;
+    row.hidden = app.view !== 'office';
+    const tick = (label, on, title, set) => el('label', { class: 'name-tick', title }, el('input', { type: 'checkbox', checked: on, onchange: (e) => set(e.target.checked) }), ` ${label}`);
+    const keep = (key, on) => { try { localStorage.setItem(key, on ? 'on' : 'off'); } catch { /* fine */ } };
+    // A box ticked from the keyboard keeps the focus when the row is drawn again.
+    const focused = [...row.querySelectorAll('input')].indexOf(document.activeElement);
+    const drawn = swap(row,
+      tick('Show names', app.showNames, 'The staff\'s names under them in the office', (on) => { app.showNames = on; keep('ai-office-show-names', on); window.officeView?.refresh?.(); }),
+      tick('PC name', app.showPcName, 'The project\'s name above each desk\'s computer', (on) => { app.showPcName = on; keep('ai-office-show-pc-name', on); window.officeView?.refresh?.(); }),
+      tick('Show general chit-chat', app.chatMode() === 'all', 'The office banter in Thoughts. Unticked, Thoughts keeps only what the threads are doing (Setup also has Off)', (on) => app.setChatMode(on ? 'all' : 'work')));
+    if (drawn && focused >= 0) row.querySelectorAll('input')[focused]?.focus();
   }
 
   app.pickProject = (folder) => pickProject(folder);
@@ -252,17 +281,27 @@
     const dl = el('dl', {},
       el('dt', { text: 'Now' }), el('dd', {}, stateTag(p.state), p.state === 'home' ? '' : ` ${p.words}`, p.since ? el('span', { class: 'note' }, ` · for ${lasted(p.since)}`) : ''),
       el('dt', { text: 'Thread' }), el('dd', { text: t ? t.title : (p.lastAt ? `None open; last seen ${ago(Date.parse(p.lastAt))}` : 'None yet') }),
-      el('dt', { text: 'Helpers' }), el('dd', { text: t ? String(t.helpers || 0) : '0' }),
-      el('dt', { text: 'Today' }), el('dd', { text: `${tokens(p.today)} tokens written` }),
-      el('dt', { text: 'Earned' }), el('dd', { text: `${tokens(p.outSince)} tokens since the office opened (they go into the Staff rewards purse)` }),
-      el('dt', { text: 'Before' }), el('dd', { text: `${tokens(Math.max(0, p.out - p.outSince))} tokens before the office opened (shown, not spent)` }),
-      el('dt', { text: 'All time' }), el('dd', { text: `${tokens(p.out)} tokens in ${p.threads} ${p.threads === 1 ? 'thread' : 'threads'}` }));
+      // Their voice in the office chat, the same for good (it belongs to the seat).
+      window.officeView?.character ? el('dt', { text: 'Character' }) : null, window.officeView?.character ? el('dd', { text: window.officeView.character(p.key) }) : null);
+    // Earnings: helpers and tokens, folded under one line that says today's figure; open, it stays open as the card ticks.
+    const live0 = side.dataset.card === p.key ? side.querySelector(':scope > .card-live') : null;
+    const earnOpen = !!live0?.querySelector('details.earnings[open]');
+    const earnings = el('details', { class: 'earnings', open: earnOpen },
+      el('summary', {}, el('b', { text: 'Earnings' }), el('span', { class: 'note', text: ` · ${tokens(p.today)} tokens today` })),
+      el('dl', {},
+        el('dt', { text: 'Helpers' }), el('dd', { text: t ? String(t.helpers || 0) : '0' }),
+        el('dt', { text: 'Today' }), el('dd', { text: `${tokens(p.today)} tokens written` }),
+        el('dt', { text: 'Earned' }), el('dd', { text: `${tokens(p.outSince)} tokens since the office opened (they go into the Staff rewards purse)` }),
+        el('dt', { text: 'Before' }), el('dd', { text: `${tokens(Math.max(0, p.out - p.outSince))} tokens before the office opened (shown, not spent)` }),
+        el('dt', { text: 'All time' }), el('dd', { text: `${tokens(p.out)} tokens in ${p.threads} ${p.threads === 1 ? 'thread' : 'threads'}` })));
     const asked = (waiting || (t && t.asked)) ? el('div', { class: 'asked' }, el('b', { text: 'Asked you: ' }), (waiting?.asked || t.asked)) : null;
     const doneBtn = waiting ? el('div', { class: 'row' }, el('button', {
       type: 'button',
       class: 'btn primary',
+      // Looked up at click time: a kept button (same question, a second thread in the seat) would post the old id.
       onclick: async () => {
-        try { await api('/api/done', { id: waiting.id }); showFault(null); await refresh(); } catch (e) { showFault(e); }
+        const w = (app.data?.waiting || []).find((x) => x.person === p.key);
+        try { if (w) await api('/api/done', { id: w.id }); showFault(null); await refresh(); } catch (e) { showFault(e); }
       },
     }, 'Answered: take off the list'), el('span', { class: 'note', text: 'It comes back if they ask again.' })) : null;
     const steps = t && t.steps?.length ? el('ol', { class: 'steps', reversed: true }, [...t.steps].reverse().map((s) => el('li', {}, el('time', { datetime: s.at, text: clock(s.at) }), s.words))) : null;
@@ -284,7 +323,7 @@
       el('span', { class: 'msg-who' }, m.who === 'you' ? 'You' : 'Claude', el('time', { datetime: m.at, text: ` ${clock(m.at)}` })),
       el('span', { class: 'msg-text', text: m.text })))) : null;
     const msgsHead = msgs ? el('h3', { text: t ? 'Recent messages' : `Recent messages: ${r.title}` }) : null;
-    swap(live, dl, msgsHead, msgs, steps ? el('h3', { text: 'Last steps' }) : null, steps);
+    swap(live, dl, earnings, msgsHead, msgs, steps ? el('h3', { text: 'Last steps' }) : null, steps);
   }
 
   /** The card's two stars: this person, and their whole project. */
@@ -377,6 +416,7 @@
   function draw() {
     if (!app.data) return;
     drawProjects();
+    drawViewTicks();
     drawPurse();
     // The office first: it also takes in the shop, which the right panel's Staff rewards tab is drawn from.
     window.officeView?.update?.(app.data, officePeople());
@@ -449,7 +489,6 @@
     document.getElementById('office-view').hidden = v !== 'office';
     document.getElementById('list-view').hidden = v !== 'list';
     document.getElementById('favs-view').hidden = v !== 'favs';
-    try { localStorage.setItem('ai-office-view', v); } catch { /* fine */ }
     draw();
   }
   document.getElementById('tab-office').addEventListener('click', () => setView('office'));
@@ -465,8 +504,9 @@
   });
   document.getElementById('tab-list').addEventListener('click', () => setView('list'));
   document.getElementById('tab-favs').addEventListener('click', () => setView('favs'));
-  let saved = 'office';
-  try { saved = localStorage.getItem('ai-office-view') || 'office'; } catch { /* fine */ }
+  // The page always opens on the office; only an address that names a tab opens another (the last one is not reopened).
+  // An address can name the tab: /#list, /#favourites or /#office.
+  let saved = { '#list': 'list', '#favourites': 'favs', '#office': 'office' }[location.hash] || 'office';
   if (!window.officeView) saved = 'list';
   setView(['list', 'favs'].includes(saved) ? saved : 'office');
   document.addEventListener('keydown', (e) => {

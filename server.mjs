@@ -12,14 +12,25 @@ import { fileURLToPath } from 'node:url';
 import { Office } from './src/office.mjs';
 import { shopOf, buy } from './src/shop.mjs';
 import * as setup from './src/setup.mjs';
+import * as update from './src/update.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const PORT = Number(process.env.PORT) || 8860;
 const dataDir = process.env.AI_OFFICE_DATA || path.join(here, 'data');
 const office = new Office({ dataDir, transcriptsDir: process.env.AI_OFFICE_TRANSCRIPTS });
 const PUBLIC = path.join(here, 'public');
+// The page's sun reckoning (public/sun.js), also run here so the page comes in its colours. It is written for the page and
+// for CommonJS, and this folder is ES modules, so it is run with a module object of its own.
+const SUN = (() => { const m = { exports: {} }; new Function('module', fs.readFileSync(path.join(PUBLIC, 'sun.js'), 'utf8'))(m); return m.exports; })();
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '.json': 'application/json' };
 const SCAN_MS = 3000;
+const VERSION = JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf8')).version;
+// A test copy (its own data or transcripts folder) runs from the same folder as the real office, so only the real one updates it.
+const TEST_COPY = !!(process.env.AI_OFFICE_DATA || process.env.AI_OFFICE_TRANSCRIPTS) && process.env.AI_OFFICE_UPDATE_TEST !== '1';
+const notHere = () => (TEST_COPY ? { error: { fault: 'A test copy does not update.', reason: 'It runs from the same folder as your real office.', wayOut: 'Open the real office and use Setup › Update there.' } } : null);
+/** One update step at a time: a second press waits for the first. */
+let updating = null;
+const once = (job) => { if (!updating) updating = job().finally(() => { updating = null; }); return updating; };
 
 let lastScanError = '';
 /** While the first read is going: how far it has got ({ done, total, first }); null once every transcript is read. */
@@ -79,11 +90,14 @@ function allowed(req) {
 
 const server = http.createServer(async (req, res) => {
   if (!allowed(req)) return fail(res, 403, 'That request was turned away.', 'The office only answers its own page on this PC.', `Open http://127.0.0.1:${PORT}/ instead.`);
-  const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+  let url;
+  try { url = new URL(req.url, `http://127.0.0.1:${PORT}`); } catch {
+    return fail(res, 400, 'That address could not be read.', 'It is not a web address the office understands.', `Open http://127.0.0.1:${PORT}/ instead.`);
+  }
   try {
     if (req.method === 'GET' && url.pathname === '/api/state') {
       const s = office.snapshot({ preview: !!loading });
-      return send(res, 200, { ...s, loading, shop: shopOf(office, s.earned), scanError: lastScanError, setup: setup.status(office) });
+      return send(res, 200, { ...s, loading, shop: shopOf(office, s.earned), scanError: lastScanError, setup: setup.status(office), version: VERSION });
     }
     if (req.method === 'POST' && url.pathname === '/api/nickname') {
       const b = await readBody(req);
@@ -135,12 +149,30 @@ const server = http.createServer(async (req, res) => {
       if (r.error) return send(res, 400, { error: r.error });
       return send(res, 200, r);
     }
+    if (req.method === 'POST' && (url.pathname === '/api/update/check' || url.pathname === '/api/update/pull')) {
+      // Asks GitHub (only now) what is newer; then takes it (a fast-forward only).
+      const r = notHere() || await once(() => (url.pathname.endsWith('check') ? update.check(here) : update.pull(here)));
+      return send(res, r.error ? 409 : 200, r);
+    }
+    if (req.method === 'POST' && url.pathname === '/api/update/restart') {
+      if (notHere()) return send(res, 409, notHere());
+      update.restartAfterExit(here);
+      send(res, 200, { ok: true });
+      setTimeout(() => { try { office.save(); } catch { /* the next start reads what is new */ } process.exit(0); }, 200);
+      return;
+    }
     if (req.method === 'GET') {
       const name = url.pathname === '/' ? 'index.html' : decodeURIComponent(url.pathname.slice(1));
       if (!/^[\w.-]+$/.test(name)) return fail(res, 404, 'Nothing here.', 'That address is not part of the office.', 'Go to the office home page.');
       const file = path.join(PUBLIC, name);
       let data;
       try { data = fs.readFileSync(file); } catch { return fail(res, 404, 'Nothing here.', 'That address is not part of the office.', 'Go to the office home page.'); }
+      // The page comes in its theme (one of setup.THEMES, so safe to write in), so it never shows light for a moment
+      // before turning dark. Auto is light from sunrise to sunset where this PC's time zone is (public/sun.js).
+      if (name === 'index.html') {
+        const choice = setup.theme(office);
+        data = data.toString('utf8').replace('<html lang="en">', `<html lang="en" data-theme-choice="${choice}" data-theme="${SUN.resolve(choice)}">`);
+      }
       return send(res, 200, data, TYPES[path.extname(name)] || 'application/octet-stream');
     }
     return fail(res, 405, 'That cannot be done here.', 'The office does not take that kind of request.', 'Use the office page.');
@@ -182,9 +214,12 @@ server.listen(PORT, '127.0.0.1', () => {
   console.log(`AI Office Overview is open: http://127.0.0.1:${PORT}/ (keep this window open while you use it)`);
   console.log(`Reading ${office.transcriptsDir}; keeping its own files in ${dataDir}.`);
   // Start AI Office Overview.cmd asks for the page to open: it opens at once and shows the reading as it goes.
-  if (process.argv.includes('--open') && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', `http://127.0.0.1:${PORT}/`], { detached: true, stdio: 'ignore' }).unref();
+  if (process.argv.includes('--open') && process.env.AI_OFFICE_OPEN !== '0' && process.platform === 'win32') spawn('cmd', ['/c', 'start', '', `http://127.0.0.1:${PORT}/`], { detached: true, stdio: 'ignore' }).unref();
   load();
 });
+// One request that goes wrong in a way nobody caught must not close the office for every other one: say it and carry on.
+process.on('unhandledRejection', (e) => { console.error('[unhandled]', e); });
+
 server.on('error', (e) => {
   if (e.code === 'EADDRINUSE') console.error(`Port ${PORT} is already in use: the office may already be open at http://127.0.0.1:${PORT}/ .`);
   else console.error(e);

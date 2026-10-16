@@ -1,41 +1,32 @@
+/* Colours: each token is light-dark(day, night). The theme is chosen with the sun / moon / auto switch at the top or in
+   Setup, and served on <html>: data-theme="light" or "dark" fixes it; "system" (or none) follows Windows. Nothing below
+   names a colour of its own. */
 :root {
-  --page: #f2f4f7;
-  --card: #ffffff;
-  --ink: #1d2533;
-  --soft: #5a6577;
-  --line: #d9dee6;
-  --accent: #2457d6;
-  --accent-ink: #ffffff;
-  --working: #1f7a4d;
-  --thinking: #6b4bb8;
-  --needs: #b5470b;
-  --needs-bg: #fff1e6;
-  --idle: #4f5d73;
-  --home: #8a94a3;
-  --fault-bg: #fdecec;
-  --fault-ink: #8a1c1c;
-  color-scheme: light;
+  color-scheme: light dark;
+  --page: light-dark(#f2f4f7, #12161d);
+  --card: light-dark(#ffffff, #1b212b);
+  --ink: light-dark(#1d2533, #e8ecf2);
+  --soft: light-dark(#5a6577, #a5afbe);
+  --line: light-dark(#d9dee6, #2e3745);
+  --accent: light-dark(#2457d6, #5b8cff);
+  --accent-ink: light-dark(#ffffff, #0c1220);
+  --working: light-dark(#1f7a4d, #5fd39a);
+  --thinking: light-dark(#6b4bb8, #b9a2f5);
+  --needs: light-dark(#b5470b, #ffad73);
+  --needs-bg: light-dark(#fff1e6, #3a2516);
+  --idle: light-dark(#4f5d73, #b3bfd1);
+  --home: light-dark(#8a94a3, #7d8796);
+  --fault-bg: light-dark(#fdecec, #3b1c1c);
+  --fault-ink: light-dark(#8a1c1c, #ffc2c2);
+  /* Behind a Staff rewards picture: the same floor as the office's computer room, by day or by night. */
+  --pic-bg: light-dark(#f4f6f9, #2a3542);
+  --star-line: light-dark(#e0b04f, #c99a3c);
+  --star-bg: light-dark(#fff6dc, #3a3018);
+  --star-ink: light-dark(#6b4e00, #f2d58a);
+  --swatch-line: light-dark(rgba(0, 0, 0, 0.15), rgba(255, 255, 255, 0.3));
 }
-@media (prefers-color-scheme: dark) {
-  :root {
-    --page: #12161d;
-    --card: #1b212b;
-    --ink: #e8ecf2;
-    --soft: #a5afbe;
-    --line: #2e3745;
-    --accent: #5b8cff;
-    --accent-ink: #0c1220;
-    --working: #5fd39a;
-    --thinking: #b9a2f5;
-    --needs: #ffad73;
-    --needs-bg: #3a2516;
-    --idle: #b3bfd1;
-    --home: #7d8796;
-    --fault-bg: #3b1c1c;
-    --fault-ink: #ffc2c2;
-    color-scheme: dark;
-  }
-}
+:root[data-theme="light"] { color-scheme: light; }
+:root[data-theme="dark"] { color-scheme: dark; }
 [hidden] { display: none !important; }
 * { box-sizing: border-box; }
 html { font-size: 16px; }
@@ -45,7 +36,7 @@ body {
   color: var(--ink);
   font: 15px/1.45 system-ui, "Segoe UI", Roboto, Arial, sans-serif;
 }
-button, input { font: inherit; color: var(--ink); }
+button, input, select { font: inherit; color: var(--ink); }
 button { cursor: pointer; }
 :focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
 
@@ -56,7 +47,7 @@ button { cursor: pointer; }
 .top h1 { margin: 0; font-size: 20px; }
 .top h1 a { color: inherit; text-decoration: none; }
 .top h1 a:hover, .top h1 a:focus-visible { text-decoration: underline; }
-.top-right { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.top-right { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; align-items: center; }
 .chip {
   border: 1px solid var(--line); background: var(--card); border-radius: 999px;
   padding: 5px 12px; font-size: 14px; white-space: nowrap;
@@ -64,25 +55,60 @@ button { cursor: pointer; }
 .chip:hover { border-color: var(--accent); }
 .chip[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
 .purse { font-weight: 600; }
+/* The colours, on the top line: sun (light), moon (dark) and auto (by sunrise and sunset). The one in use is filled. */
+.theme-switch { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--line); border-radius: 999px; background: var(--card); }
+.theme-switch button { width: 30px; height: 30px; display: grid; place-items: center; border: 0; border-radius: 50%; background: none; color: var(--soft); cursor: pointer; padding: 0; }
+.theme-switch button:hover { color: var(--ink); }
+.theme-switch button[aria-checked="true"] { background: var(--accent); color: var(--accent-ink); }
+.theme-switch svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+.theme-switch svg .fill { fill: currentColor; stroke: none; }
 
-.projects {
-  display: flex; gap: 8px; padding: 10px 16px; overflow-x: auto; border-bottom: 1px solid var(--line);
-  background: var(--page);
-}
-.projects .chip { display: inline-flex; gap: 8px; align-items: center; }
-.counts { display: inline-flex; gap: 6px; font-size: 13px; }
-.count { display: inline-flex; gap: 2px; align-items: center; }
-
-.layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 16px; padding: 16px; align-items: start; }
+/* Three columns: the projects | the office (and its tabs) | the right panel. Under 1200 px the projects go above as a row
+   of buttons; under 900 px everything stacks. */
+.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr) 370px; gap: 16px; padding: 16px; align-items: start; }
+@media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr) 370px; } .filter { grid-column: 1 / -1; } }
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 
-.middle, .side { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
-.side { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+.middle, .side, .filter { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
+.side, .filter { position: sticky; top: 12px; max-height: calc(100vh - 24px); overflow: auto; }
+@media (max-width: 1200px) { .filter { position: static; max-height: none; } }
 @media (max-width: 900px) { .side { position: static; max-height: none; } }
+
+/* The projects, down the left: All projects, then each project with who is doing what (icon and count). The one shown
+   is filled. */
+.filter h2 { font-size: 16px; margin: 4px 0 8px; }
+.filter-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+@media (max-width: 1200px) { .filter-list { display: flex; flex-wrap: wrap; gap: 6px; } }
+.filter-item { width: 100%; text-align: left; display: grid; gap: 1px; border: 1px solid transparent; background: none; border-radius: 8px; padding: 6px 8px; min-width: 0; }
+.filter-item:hover { border-color: var(--line); background: var(--page); }
+.filter-item[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.filter-item[aria-pressed="true"] .counts, .filter-item[aria-pressed="true"] .count { color: var(--accent-ink); }
+.filter-name { font-weight: 600; overflow-wrap: anywhere; }
+.counts { display: inline-flex; flex-wrap: wrap; gap: 2px 8px; font-size: 13px; }
+.count { display: inline-flex; gap: 2px; align-items: center; }
+/* On a wide window the page itself never scrolls: it fills the window, and each column scrolls on its own (one scroll bar
+   per column, never a second one for the page). The Office / List / Favourites tabs stay at the top of the middle column
+   while its content scrolls under them. A narrow window (everything stacked) scrolls as one page. */
+@media (min-width: 901px) {
+  body { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .top, .loading, .fault { flex: none; }
+  .layout { flex: 1 1 auto; min-height: 0; align-items: stretch; grid-template-rows: minmax(0, 1fr); }
+  .middle, .side, .filter { position: static; max-height: none; min-height: 0; overflow: auto; }
+  .middle > .view-tabs { position: sticky; top: -12px; z-index: 3; background: var(--card); margin-top: -12px; padding-top: 12px; }
+}
+@media (min-width: 901px) and (max-width: 1200px) { .layout { grid-template-rows: auto minmax(0, 1fr); } .filter { max-height: 30vh; } }
 
 .view-tabs { display: flex; gap: 4px; margin-bottom: 10px; }
 .view-tabs button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 14px; }
 .view-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+/* Under the tabs, above the office: Show names, PC name and Show general chit-chat, on one row. */
+.name-ticks { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 0 0 8px; font-size: 13px; color: var(--soft); }
+.name-tick { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; }
+/* A person's card: Earnings (helpers and tokens) folded under one line with today's figure. */
+.earnings { border-top: 1px solid var(--line); padding-top: 6px; margin: 6px 0 10px; }
+.earnings > summary { cursor: pointer; padding: 4px 0; }
+.earnings > summary:hover b { color: var(--accent); }
+.earnings dl { margin: 6px 0 0; }
 
 #office { width: 100%; }
 #office canvas { width: 100%; height: auto; display: block; border-radius: 8px; touch-action: manipulation; }
@@ -132,6 +158,9 @@ button { cursor: pointer; }
 .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 8px 0; }
 .btn { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 6px 12px; }
 .btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+/* A choice of several (the theme): the one in use is filled, and says so to a screen reader (aria-pressed). */
+.btn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.sheet-box select { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--card); }
 .btn.link { border: 0; background: none; color: var(--accent); padding: 4px 0; text-decoration: underline; }
 .nick-form input { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; background: var(--card); min-width: 0; flex: 1 1 160px; }
 .note { color: var(--soft); font-size: 13px; }
@@ -153,12 +182,23 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 #office { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
 #office canvas { flex: none; }
 .office-strip { flex: 0 0 240px; margin: 0; }
+/* Nobody picked: the staff's latest thoughts, newest first (three on a narrow screen). */
+.thoughts { list-style: none; margin: 6px 0 8px; padding: 0; display: grid; gap: 8px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
+/* A chat message: the writer's small head on the left, their name and when above the words (like a team chat). */
+.chat-msg { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; align-items: start; }
+.chat-msg.new { animation: chat-in .25s ease-out; }
+.chat-head { width: 26px; height: 26px; border-radius: 50%; overflow: hidden; display: grid; place-items: center; background: var(--page); font-weight: 700; font-size: 12px; }
+.chat-head canvas { width: 26px; height: 26px; }
+.chat-body { min-width: 0; }
+@keyframes chat-in { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .chat-msg.new { animation: none; } }
 @media (max-width: 700px) {
   #office { flex-direction: column; align-items: stretch; }
   .office-strip { flex: none; margin: 6px 0 0; min-height: 4.4em; }
+  .thoughts li:nth-child(n + 4) { display: none; }
 }
 .shop-item .row { margin: 0; gap: 10px; flex-wrap: nowrap; }
-.shop-item canvas { width: 80px; height: 60px; flex: none; background: #f4f6f9; border-radius: 8px; }
+.shop-item canvas { width: 80px; height: 60px; flex: none; background: var(--pic-bg); border-radius: 8px; }
 /* A locked room in Staff rewards: one line with what unlocking it costs and the Unlock button. */
 .room-locked { justify-content: space-between; align-items: center; gap: 8px; margin: 0; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; font-size: 13px; }
 
@@ -166,15 +206,15 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 .side-tabs { display: flex; gap: 4px; margin-bottom: 10px; flex-wrap: wrap; }
 .side-tabs button { border: 1px solid var(--line); background: var(--card); border-radius: 8px; padding: 4px 12px; }
 .side-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
-/* Staff rewards: tiles two across, each the same shape (picture, name, price and what is left to go, the button). */
-.side .shop-list { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+/* Staff rewards: tiles three across, each the same shape (picture, name, price and what is left to go, the button). */
+.side .shop-list { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
 .side .shop-item { grid-template-columns: minmax(0, 1fr); gap: 6px; align-content: start; padding: 8px; }
 .side .shop-item > .btn { justify-self: start; }
 .side .shop-item canvas { width: 64px; height: 48px; }
 .side .shop-item .what b { display: block; }
 /* Favourites: the card's two stars, and the small Hide box under a favourite who has gone home. */
 .fav-row { gap: 8px; flex-wrap: wrap; }
-.fav-btn[aria-pressed="true"] { border-color: #e0b04f; background: #fff6dc; color: #6b4e00; }
+.fav-btn[aria-pressed="true"] { border-color: var(--star-line); background: var(--star-bg); color: var(--star-ink); }
 #favs-view .people > li { display: grid; gap: 4px; align-content: start; }
 .fav-hide { display: flex; align-items: center; gap: 6px; margin: 0 2px; }
 /* The open-thread button on a person's card: on its own, centred. */
@@ -229,7 +269,7 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 .look-choice { border: 1px solid var(--line); background: var(--card); color: var(--ink); }
 .look-text { border-radius: 999px; padding: 3px 12px; font-size: 14px; }
 .look-text[aria-pressed="true"] { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); font-weight: 600; }
-.look-swatch { width: 30px; height: 30px; border-radius: 50%; padding: 0; display: grid; place-items: center; border: 2px solid rgba(0, 0, 0, 0.15); }
+.look-swatch { width: 30px; height: 30px; border-radius: 50%; padding: 0; display: grid; place-items: center; border: 2px solid var(--swatch-line); }
 .look-swatch[aria-pressed="true"] { outline: 3px solid var(--accent); outline-offset: 2px; }
 .look-tick { width: 18px; height: 18px; border-radius: 50%; background: #fff; color: #27364e; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
 .look-face { border-radius: 12px; padding: 4px 4px 3px; display: grid; justify-items: center; gap: 2px; width: 64px; font-size: 12px; }
@@ -250,3 +290,12 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 /* While the transcripts are being read. */
 .loading { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 16px; background: var(--needs-bg); border-bottom: 1px solid var(--line); font-size: 14px; }
 .loading progress { flex: 0 1 220px; height: 10px; }
+/* Staff rewards: the purchases so far, folded. */
+.recent { margin: 0 0 8px; font-size: 13px; }
+.recent > summary { cursor: pointer; }
+.recent > summary:hover b { color: var(--accent); }
+.recent-list { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 2px; }
+.recent-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; border-bottom: 1px solid var(--line); padding: 2px 0; }
+/* Setup › Update */
+.update-box { padding: 8px 0; }
+.update-list { margin: 6px 0; padding-left: 18px; max-height: 220px; overflow-y: auto; display: grid; gap: 3px; }

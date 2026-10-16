@@ -99,7 +99,15 @@ export function stateOf(t, now, quietMs, helpers = [], hook = null) {
   const say = (w) => (helping ? `A helper is ${w.charAt(0).toLowerCase()}${w.slice(1)}` : w);
   switch (last.kind) {
     case 'done':
-      if (helping) return { state: 'working', words: say('Finishing up'), since: atMs };
+      if (helping) {
+        // A helper that ends after the thread itself has finished (or asked you) changes nothing: the thread's own
+        // last word stands, so a question it asked stays on Needs attention.
+        const own = t.last || {};
+        const ownMs = Date.parse(t.lastAt) || atMs;
+        if (own.kind === 'tool' && own.tool === 'AskUserQuestion') return { state: 'needs', words: 'Asked you a question', since: ownMs };
+        if (own.kind === 'done') return t.asked ? { state: 'needs', words: 'Asked you something', since: ownMs } : { state: 'idle', words: 'Finished', since: ownMs };
+        return { state: 'working', words: say('Finishing up'), since: atMs };
+      }
       return t.asked ? { state: 'needs', words: 'Asked you something', since: atMs } : { state: 'idle', words: 'Finished', since: atMs };
     case 'stopped':
       return { state: 'idle', words: 'Stopped', since: atMs };

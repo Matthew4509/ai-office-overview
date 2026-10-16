@@ -79,3 +79,47 @@ test('a file is read a piece at a time: a half-written last line waits for the r
     h.done();
   }
 });
+
+test('a snag for the quips: a step that ended in an error, or the AI saying it found a bug; a declined step is not one', () => {
+  const t = emptyThread('a');
+  const result = (at, is_error, text) => ({ type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', is_error, content: text }] } });
+  const said = (at, text) => ({ type: 'assistant', timestamp: at, message: { id: at, content: [{ type: 'text', text }] } });
+  addLine(t, result('2026-10-16T10:00:00Z', false, 'all passed'));
+  assert.equal(t.snag, null);
+  addLine(t, result('2026-10-16T10:01:00Z', true, "The user doesn't want to proceed with this tool use."));
+  assert.equal(t.snag, null, 'a step the person declined is their choice, not a snag');
+  addLine(t, result('2026-10-16T10:02:00Z', true, 'Exit code 1\nFAIL'));
+  assert.deepEqual(t.snag, { at: '2026-10-16T10:02:00Z', kind: 'failed', run: 1 });
+  addLine(t, said('2026-10-16T10:03:00Z', 'Found the bug: the list was read before it was sorted.'));
+  assert.deepEqual(t.snag, { at: '2026-10-16T10:03:00Z', kind: 'bug', run: 2 });
+  addLine(t, said('2026-10-16T10:04:00Z', 'No bugs here, the tests pass.'));
+  assert.equal(t.snag.at, '2026-10-16T10:03:00Z', 'a mention of the word alone is not a find');
+  addLine(t, result('2026-10-16T10:09:00Z', true, 'FAIL again'));
+  assert.equal(t.snag.run, 3, 'three snags in 15 minutes: a big bug (the council of ducks)');
+  addLine(t, result('2026-10-16T10:40:00Z', true, 'FAIL'));
+  assert.equal(t.snag.run, 1, 'a snag long after the others starts a new run');
+});
+
+test('events for the chat: tests passed or failed, a commit or push that worked, the same file again, a stopped reply', () => {
+  const t = emptyThread('a');
+  const step = (at, id, name, input) => addLine(t, { type: 'assistant', timestamp: at, message: { id: at, content: [{ type: 'tool_use', id, name, input }] } });
+  const result = (at, id, is_error) => addLine(t, { type: 'user', timestamp: at, message: { content: [{ type: 'tool_result', tool_use_id: id, is_error, content: 'output' }] } });
+  step('2026-10-16T10:00:00Z', 't1', 'Bash', { command: 'node tools/test-all.js', description: 'Run the tests' });
+  assert.equal(t.event, null, 'nothing until the result is in');
+  result('2026-10-16T10:01:00Z', 't1', false);
+  assert.deepEqual(t.event, { at: '2026-10-16T10:01:00Z', kind: 'tests-passed' });
+  step('2026-10-16T10:02:00Z', 't2', 'Bash', { command: 'npm test' });
+  result('2026-10-16T10:03:00Z', 't2', true);
+  assert.equal(t.event.kind, 'tests-failed');
+  step('2026-10-16T10:04:00Z', 't3', 'Bash', { command: 'git commit -m "Save"' });
+  result('2026-10-16T10:05:00Z', 't3', true);
+  assert.equal(t.event.kind, 'tests-failed', 'a commit that failed is not a commit');
+  step('2026-10-16T10:06:00Z', 't4', 'Bash', { command: 'git push origin main' });
+  result('2026-10-16T10:07:00Z', 't4', false);
+  assert.equal(t.event.kind, 'push');
+  for (let i = 0; i < 3; i++) step(`2026-10-16T10:1${i}:00Z`, `e${i}`, 'Edit', { file_path: 'C:/work/site/app.js' });
+  assert.deepEqual(t.event, { at: '2026-10-16T10:12:00Z', kind: 'again', file: 'app.js', n: 3 });
+  addLine(t, { type: 'user', timestamp: '2026-10-16T10:13:00Z', message: { content: '[Request interrupted by user]' } });
+  assert.equal(t.event.kind, 'stopped');
+  assert.ok(!JSON.stringify(t.event).includes('work/site'), 'only a file\'s short name is kept');
+});

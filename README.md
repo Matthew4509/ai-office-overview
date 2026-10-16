@@ -20,17 +20,27 @@ start also opens the office: the purse counts from then on.
 
 ## What you see
 
-- **AI Office Overview** (the title, top left) goes back to the office with all projects.
-- **Projects strip** (top): every project with a thread today, with how many people are working, thinking, need you,
-  or have finished. Click one to show only that project.
+- **AI Office Overview** (the title, top left) goes back to the office with all projects. The page always opens on the
+  office (an address ending `#list` or `#favourites` opens that tab instead).
+- **Sun, moon and auto** (top right): light, dark, or Auto, which is light from sunrise to sunset and dark at night.
+  Sunrise is worked out from this PC's time zone, so nothing is asked online. Setup also has **Match Windows**. Dark dims
+  the rooms and the beach too. Until one is picked the office is light.
+- **Projects** (down the left; above the office on a narrower window): All projects, then every project with a thread
+  today, with how many people are working, thinking, need you, or have finished. Click one to show only that project.
 - **The office** (or **List**, the same in words): click a person to open their card. What the person picked is doing
-  shows to the right of the office (under it on a narrow screen).
+  shows to the right of the office (under it on a narrow screen). On a wide window the page itself does not scroll:
+  the middle and the right panel each scroll on their own.
+- **Ticks under the tabs** (with the office): **Show names** (the staff's names), **PC name** (the project's name above
+  each desk's computer) and **Show general chit-chat** (the office banter in Thoughts; unticked, Thoughts keeps only what
+  the threads are doing). All three are ticked until you untick them. Kept in this
+  browser.
 - **Needs attention** (right panel, first tab): every thread whose last reply asked you something, longest waiting first. Press
   "Answered: take off the list" on the card once you have dealt with it; it comes back if they ask again.
 - **A person's card** shows their name with **EDIT** beside it (their name and look, TOMLIN's look editor; both belong
   to the seat), **Open in Claude** (opens their thread in the Claude desktop app), their project and seat, what they are
-  doing now and for how long, their recent messages, their last few steps, what they asked, and the tokens they wrote
-  (today, since the office opened, before it opened, all time).
+  doing now and for how long, their recent messages, their last few steps, what they asked, and **Earnings**: one line
+  with today's tokens that opens to their helpers and the tokens they wrote (today, since the office opened, before it
+  opened, all time).
 - **List** shows everyone as tiles (up to 5 across): picture and name, then project and what they are doing.
 - **Favourites** (third tab): each project with a favourite, its name as a subtitle and its favourite staff in a row.
   Star a person with **Favourite** on their card, or everyone in their project with **Favourite project**. A favourite
@@ -41,6 +51,23 @@ start also opens the office: the purse counts from then on.
   office. The meeting room and the lounge start locked: dark, with a padlock on the door. Click one to see what it costs
   and unlock it (the lounge 10M tokens, the meeting room 20M). Until then Staff rewards says "Room not available" for
   it, with an Unlock button, instead of its furniture.
+- **Life in the office:** a courier brings each treat to the front door, the IT tech walks over and unlocks a room you
+  buy, and a fitter carries each new piece of furniture in. The staff wave a thank-you, try out what is new, and the
+  ones waiting for your answer take a short break in the lounge or on a deck chair, then come back. Pet rocks and
+  rubber ducks sit on the desks (hover for their names); the ducks go to meetings, and a run of bugs calls the council
+  of ducks. Buy everything and treat the team to each treat once, and the trophy case (World's Best Boss) arrives.
+- **Thoughts** (beside the office): the office chat. Each seat has its own character (shown on their card), with lines
+  for what really happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped
+  reply, a bug found, working late, two at one desk. Only the kind of event (and a file's short name for "the same
+  file again") is used, never text from your threads. **Setup › Thoughts chat** picks Everything, Work only (no office
+  chat) or Off.
+
+## Updating
+
+Setup › Update › **Check for a newer version** asks GitHub once (nothing about you is sent) and lists what is new.
+**Update now** takes it and restarts the office; your `data/` folder is never touched. It works for a copy made with
+`git clone https://github.com/Matthew4509/ai-office-overview.git`; a downloaded zip cannot update itself (download the
+new one and copy your `data/` folder across). It refuses, and changes nothing, when files in the folder were changed.
 
 ## The rules
 
@@ -77,8 +104,11 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 
 - `server.mjs`: the small server (127.0.0.1:8860 only).
 - `src/transcript.mjs` reads one transcript; `src/people.mjs` has the folder, seat and state rules; `src/office.mjs`
-  keeps the ledger and makes the snapshot; `src/shop.mjs` is the shop; `src/setup.mjs` does easy and advanced setup.
-- `public/`: the page. `office.js` and `look.js` are adapted from TOMLIN's office and staff looks.
+  keeps the ledger and makes the snapshot; `src/shop.mjs` is the shop; `src/setup.mjs` does easy and advanced setup;
+  `src/update.mjs` is Setup › Update.
+- `public/`: the page. `office.js` and `look.js` are adapted from TOMLIN's office and staff looks;
+  `banter.js` has the office chat's characters and lines; `sun.js` works out sunrise and sunset for the Auto colours
+  (the server runs it too, so the page comes in its colours).
 - `hook.mjs`: the advanced-setup hook.
 - `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
