@@ -27,7 +27,10 @@ function readSettings(file) {
   }
 }
 
-/** The command written into the AI app's settings for this office. */
+/** The command written into the AI app's settings for this office. The path sits in double quotes, which bash (Claude
+ * Code runs hooks through Git Bash on Windows) still reads $ and backticks in, and cmd.exe reads % in: apply() refuses
+ * a path holding one of those (or a ") before anything is written. */
+export const UNSAFE_HOOK_PATH = /[$`"%\r\n]/;
 export function hookCommand(hookScript, port) {
   return `node "${hookScript.replace(/\\/g, '/')}" ${port} --${MARK}`;
 }
@@ -92,6 +95,9 @@ export function apply(office, b, { port, hookScript }) {
   const file = settingsFile();
   const r = readSettings(file);
   if (r.error) return r;
+  if (b.advanced && UNSAFE_HOOK_PATH.test(String(hookScript))) {
+    return { error: { fault: 'Advanced setup cannot be turned on from this folder.', reason: `The office's folder (${path.dirname(String(hookScript))}) has a $, backtick, " or % in its path, which Claude's hook runner would read as part of a command.`, wayOut: 'Move the office to a folder whose path has none of those characters, then try again. Easy setup still works.' } };
+  }
   const next = b.advanced ? withOurs(r.data, hookCommand(hookScript, port)) : withoutOurs(r.data);
   const text = `${JSON.stringify(next, null, 2)}\n`;
   if (text === r.text) return { ok: true, status: status(office), unchanged: true };

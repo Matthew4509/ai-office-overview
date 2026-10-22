@@ -58,9 +58,27 @@
       bold: ['Pushed straight to main. Live a little.'],
     },
     'push-friday': {
-      any: ['A push on a Friday. Bold choice.', 'Pushed. On a Friday. Nobody tell the weekend.'],
+      any: ['A push on a Friday. Bold choice.', 'Pushed. On a Friday. Nobody tell the weekend.', 'Pushing on a Friday... isn\'t there a rule about this?'],
       lead: ['Nobody push anything. It\'s Fri… oh. Never mind.'],
       bold: ['Friday push. Fortune favours the brave.'],
+    },
+    'push-weekend': {
+      any: ['A weekend push. Nobody is watching, which is the worry.', 'Pushed. The servers had plans this weekend.', 'Pushing on a day off. What could go wrong?'],
+      punny: ['A weekend push: I call it a week-ender.'],
+      dry: ['Pushed. On my day off. Lovely.'],
+      sunny: ['Weekend push! Living the dream!'],
+      quiet: ['Pushed. Weekend.'],
+      lead: ['It\'s the weekend. Why are we pushing?'],
+      bold: ['Weekends are for shipping.'],
+    },
+    'tests-failed-monday': {
+      any: ['Failing tests on a Monday. Of course.', 'Monday, and the tests already hate me.', 'Red tests before the first coffee.'],
+      punny: ['Looks like a case of the Mondays. And the bugs.'],
+      dry: ['Mondays. Say no more.'],
+      sunny: ['New week, new bugs! I mean puzzles!'],
+      quiet: ['Monday.'],
+      lead: ['It\'s Monday. Coffee first, then the tests.'],
+      bold: ['They failed because it\'s Monday. Not my fault.'],
     },
     again: {
       any: ['{file} again. It\'s Groundhog Day in here.', 'Edit number {n} on {file}. We\'re getting close. Probably.', 'Back to {file}. It missed me.'],
@@ -117,6 +135,8 @@
     'tests-passed': { dry: ['I\'m uncomfortable with this.'], lead: ['Don\'t get used to it.'], sunny: ['Woo!'] },
     'tests-failed': { dry: ['Only if you\'ve never met the code.'], sunny: ['Need a hand, {who}?'], lead: ['Fix first, jokes later.'] },
     'push-friday': { lead: ['Absolutely not. …Too late.'], dry: ['See you all on Saturday, then.'] },
+    'push-weekend': { lead: ['Go home, {who}. It\'s the weekend.'], sunny: ['Weekend warrior!'] },
+    'tests-failed-monday': { dry: ['Classic Monday.'], sunny: ['We\'ll have it green by lunch, {who}!'] },
     again: { dry: ['Again?'], sunny: ['Third time\'s the charm!'] },
     bug: { dry: ['Dude. You wrote it.'], sunny: ['Send it over, {who}. We\'ll fix it first, laugh later.'], punny: ['Call the exterminator.'] },
     late: { lead: ['Go home, {who}.'], quiet: ['Me too.'] },
@@ -131,6 +151,11 @@
     'tests-failed': [['It was working five minutes ago.', 'What changed?', 'Nothing. Well. Something.']],
   };
 
+  // Lines that always get their answer when someone is near: the nearest says it, whoever they are.
+  const COMEBACKS = {
+    'It worked on my desk.': ['Well, we\'re not shipping YOUR DESK now, are we?'],
+  };
+
   // Work only (the office chat off): the plain fact, no banter. null: nothing to say.
   const FACTS = {
     'tests-passed': () => 'Tests passed.',
@@ -138,12 +163,46 @@
     commit: () => 'Committed.',
     push: () => 'Pushed.',
     'push-friday': () => 'Pushed.',
+    'push-weekend': () => 'Pushed.',
+    'tests-failed-monday': () => 'Tests failed: looking into it.',
     again: (e) => `Editing ${e.file || 'the same file'} again (${e.n || 'several'} times).`,
     stopped: () => 'Stopped by you.',
     bug: () => 'Found a bug.',
     failed: () => 'A step failed: trying again.',
   };
   const fact = (e) => FACTS[e.kind]?.(e) ?? null;
+
+  // Payday (Thursdays, once, two or more in with different earnings today): the top earner is thrilled, the next one
+  // compares, the lowest asks if the rest of them are getting paid, and someone else sees the bright side. The figures
+  // are each one's real tokens today. Returns [{ by, text }], by = an index into `people`; [] when it does not fit.
+  const tok = (n) => (n >= 1e6 ? `${(n / 1e6).toFixed(n >= 1e7 ? 1 : 2)}M` : n >= 1e3 ? `${Math.round(n / 1e3)}K` : String(n || 0));
+  function payday(people) {
+    const paid = people.map((p, i) => ({ ...p, i })).filter((p) => p.today > 0).sort((a, b) => b.today - a.today);
+    if (paid.length < 2) return [];
+    const top = paid[0], low = paid[paid.length - 1], mid = paid.length > 2 ? paid[1] : null;
+    if (tok(top.today) === tok(low.today) || (mid && (tok(mid.today) === tok(top.today) || tok(mid.today) === tok(low.today)))) return [];
+    const out = [{ by: top.i, text: `I'm excited, I'm getting paid ${tok(top.today)} tokens...` }];
+    if (mid) {
+      out.push({ by: mid.i, text: `Hang on. You're on ${tok(top.today)} and I'm on ${tok(mid.today)}?` });
+      out.push({ by: low.i, text: `${tok(mid.today)}? I'm on ${tok(low.today)}. Wait, you lot are getting paid?` });
+    } else out.push({ by: low.i, text: `${tok(top.today)}? I'm on ${tok(low.today)}. Wait, you're getting paid?` });
+    // The bright side from someone who has not spoken yet, if there is one; else the top earner.
+    const rest = paid.slice(mid ? 2 : 1, -1);
+    const cheer = rest.length ? rest[Math.floor(Math.random() * rest.length)] : top;
+    out.push({ by: cheer.i, text: 'Well, there\'s always the odd pizza.' });
+    return out;
+  }
+
+  // Day-specific moments, by the day the event happened on this PC's clock (0 = Sunday): a push on a Friday or at the
+  // weekend always gets its own lines; failed tests on a Monday about half the time, so Mondays still hear the rest.
+  const DAY_KINDS = {
+    push: { 5: ['push-friday', 1], 6: ['push-weekend', 1], 0: ['push-weekend', 1] },
+    'tests-failed': { 1: ['tests-failed-monday', 0.5] },
+  };
+  function dayKind(e, at, rnd = Math.random) {
+    const [kind, chance] = DAY_KINDS[e?.kind]?.[new Date(at).getDay()] || [];
+    return kind && rnd() < chance ? { ...e, kind } : e;
+  }
 
   const fill = (text, e, who) => text.replaceAll('{file}', e.file || 'that file').replaceAll('{n}', String(e.n || 'a few')).replaceAll('{who}', who || 'mate');
   const pick = (list, rnd) => list[Math.floor(rnd() * list.length) % list.length];
@@ -162,7 +221,9 @@
       return [{ by: -1, text: fill(a, e, who) }, { by: 0, text: fill(b, e, who) }, { by: -1, text: fill(c, e, who) }];
     }
     const own = [...(lines[me.id] || []), ...(lines.any || [])];
-    const out = [{ by: -1, text: fill(pick(own, rnd), e, who) }];
+    const said = pick(own, rnd);
+    const out = [{ by: -1, text: fill(said, e, who) }];
+    if (COMEBACKS[said] && near.length) return [...out, { by: 0, text: fill(pick(COMEBACKS[said], rnd), e, who) }];
     // Usually nobody answers; now and then one, rarely two: each by their own chance to talk.
     const answers = rnd() < 0.55 ? 0 : rnd() < 0.75 ? 1 : 2;
     near.slice(0, answers).forEach((o, i) => {
@@ -173,5 +234,5 @@
     return out;
   }
 
-  window.officeBanter = { CHARACTERS, characterOf, plan, fact, LINES, REPLIES, EXCHANGES, KINDS: Object.keys(LINES) };
+  window.officeBanter = { CHARACTERS, characterOf, plan, fact, dayKind, payday, LINES, REPLIES, EXCHANGES, COMEBACKS, KINDS: Object.keys(LINES) };
 })();

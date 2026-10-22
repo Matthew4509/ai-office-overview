@@ -50,6 +50,8 @@ The settings file is `~/.claude/settings.json` (Windows: `C:\Users\<name>\.claud
    ```
 
    - Use the folder's full path with forward slashes, in double quotes (the path may contain spaces).
+   - If that path holds a `$`, a backtick, a `"` or a `%`, stop: the hook runner would read it as part of a command
+     (the button refuses too). Ask the user to move the office to a plainer folder first.
    - `8860` is the office's port (change it only if the office runs with a different `PORT`).
    - `--ai-office-overview-hook` is the marker the office uses to find and remove its own entries. Keep it.
    - The user's existing groups (a sound on Stop, for example) must stay exactly as they were, in their place.

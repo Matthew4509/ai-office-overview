@@ -9,7 +9,7 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Office } from './src/office.mjs';
+import { Office, safeKey } from './src/office.mjs';
 import { shopOf, buy } from './src/shop.mjs';
 import * as setup from './src/setup.mjs';
 import * as update from './src/update.mjs';
@@ -31,6 +31,11 @@ const notHere = () => (TEST_COPY ? { error: { fault: 'A test copy does not updat
 /** One update step at a time: a second press waits for the first. */
 let updating = null;
 const once = (job) => { if (!updating) updating = job().finally(() => { updating = null; }); return updating; };
+// Restart waits while an update is being taken (a second tab could stop the office half way through it).
+const midUpdate = () => (update.taking() ? { error: { fault: 'The office cannot restart just now.', reason: 'It is taking an update, and stopping half way could leave its folder between two versions.', wayOut: 'Wait a minute for it to finish, then try again.' } } : null);
+
+// A folder called __proto__, constructor or prototype would reach the object every map is built on: never kept.
+const badFolder = (res) => fail(res, 400, 'That folder name cannot be kept.', 'The office keeps __proto__, constructor and prototype for itself.', 'Rename the folder, or leave this one without a name or star.');
 
 let lastScanError = '';
 /** While the first read is going: how far it has got ({ done, total, first }); null once every transcript is read. */
@@ -101,6 +106,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/nickname') {
       const b = await readBody(req);
+      if (!safeKey(b.folder)) return badFolder(res);
       office.setNickname(b.folder ?? '', b.seat, b.nick);
       return send(res, 200, { ok: true });
     }
@@ -108,6 +114,7 @@ const server = http.createServer(async (req, res) => {
       // A star on a person ({ folder, seat, on }) or a whole project ({ folder, project: true, on }); or an old
       // favourite hidden from the Favourites tab and the beach ({ folder, seat, hidden }).
       const b = await readBody(req);
+      if (!safeKey(b.folder)) return badFolder(res);
       if (typeof b.hidden === 'boolean') office.setFavouriteHidden(b.folder ?? '', b.seat, b.hidden);
       else if (b.project === true) office.setFavouriteProject(b.folder ?? '', !!b.on);
       else office.setFavourite(b.folder ?? '', b.seat, !!b.on);
@@ -116,6 +123,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && url.pathname === '/api/edit') {
       // EDIT on a card: the seat's nickname and look together. look: an object, or null for the made-up look again.
       const b = await readBody(req);
+      if (!safeKey(b.folder)) return badFolder(res);
       if (b.look !== undefined && !office.setLook(b.folder ?? '', b.seat, b.look)) return fail(res, 400, 'That look could not be kept.', 'One of its parts is not one the office knows.', 'Pick the parts again in the editor, then save.');
       if (b.nick !== undefined) office.setNickname(b.folder ?? '', b.seat, b.nick);
       return send(res, 200, { ok: true });
@@ -155,7 +163,8 @@ const server = http.createServer(async (req, res) => {
       return send(res, r.error ? 409 : 200, r);
     }
     if (req.method === 'POST' && url.pathname === '/api/update/restart') {
-      if (notHere()) return send(res, 409, notHere());
+      const refused = notHere() || midUpdate();
+      if (refused) return send(res, 409, refused);
       update.restartAfterExit(here);
       send(res, 200, { ok: true });
       setTimeout(() => { try { office.save(); } catch { /* the next start reads what is new */ } process.exit(0); }, 200);

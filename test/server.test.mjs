@@ -75,3 +75,16 @@ test('a malformed request address gets a 400, and the office keeps running', asy
     await o.done();
   }
 });
+
+test('a folder called __proto__ is refused with a way out, and the office keeps running', async () => {
+  const o = await scratchOffice();
+  try {
+    const body = JSON.stringify({ folder: '__proto__', seat: 1, nick: 'Sneaky' });
+    const got = await raw(o.port, `POST /api/edit HTTP/1.1\r\nHost: 127.0.0.1:${o.port}\r\nContent-Type: application/json\r\nContent-Length: ${body.length}\r\nConnection: close\r\n\r\n${body}`);
+    assert.match(got, /^HTTP\/1\.1 400 /);
+    assert.match(got, /cannot be kept/);
+    assert.ok(o.alive());
+  } finally {
+    await o.done();
+  }
+});

@@ -35,7 +35,8 @@
     try {
       const r = await app.api('/api/update/pull', {});
       said2(el('p', { text: `Updated${r.newVersion ? ` to ${r.newVersion}` : ''}: ${plural(r.took, 'change', 'changes')} taken (${r.from} to ${r.to}).` }));
-      await app.api('/api/update/restart', {}).catch(() => null);
+      // A refused restart (another tab is taking an update) says so, rather than waiting for a restart that never comes.
+      try { await app.api('/api/update/restart', {}); } catch (e) { if (e?.error) return said2(el('p', { text: fault(e) }), el('div', { class: 'row' }, btn('Check again', check))); }
       backAgain();
     } catch (e) { said2(el('p', { text: fault(e) }), el('div', { class: 'row' }, btn('Check again', check))); }
   }

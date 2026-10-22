@@ -91,3 +91,28 @@ test('a git setting that names a program: git is not run at all', async () => {
   const r = await update.check(d);
   assert.match(r.error?.fault || '', /did not run git/);
 });
+
+test('a file of yours that git ignores is never replaced by one the update brings', async () => {
+  const d = path.join(tmp, 'ignored');
+  execFileSync('git', ['clone', '-q', hub, d], { stdio: 'pipe' });
+  fs.appendFileSync(path.join(d, '.git', 'info', 'exclude'), 'notes.txt\n');
+  fs.writeFileSync(path.join(d, 'notes.txt'), 'mine\n');
+  save(maker, 'notes.txt', 'theirs\n');
+  git(maker, 'push', '-q', 'origin', 'main');
+  const r = await update.check(d);
+  assert.ok(r.ok && r.behind >= 1 && !r.changed.length, JSON.stringify(r));
+  const p = await update.pull(d);
+  assert.match(p.error?.fault || '', /did not go in/);
+  assert.equal(fs.readFileSync(path.join(d, 'notes.txt'), 'utf8'), 'mine\n');
+});
+
+test('while an update is being taken, taking() says so (Restart waits for it), and not after', async () => {
+  const d = path.join(tmp, 'busy');
+  execFileSync('git', ['clone', '-q', hub, d], { stdio: 'pipe' });
+  git(d, 'reset', '-q', '--hard', 'HEAD~1');
+  assert.equal(update.taking(), false);
+  const p = update.pull(d);
+  assert.equal(update.taking(), true);
+  assert.ok((await p).ok);
+  assert.equal(update.taking(), false);
+});

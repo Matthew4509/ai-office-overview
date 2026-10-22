@@ -168,7 +168,7 @@ button { cursor: pointer; }
 .sheet {
   position: fixed; inset: 0; background: rgba(10, 14, 22, 0.55); display: grid; place-items: center; padding: 16px; z-index: 10;
 }
-.sheet-box { background: var(--card); color: var(--ink); border-radius: 14px; padding: 16px; width: min(640px, 100%); max-height: calc(100vh - 32px); overflow: auto; }
+.sheet-box { background: var(--card); color: var(--ink); border-radius: 14px; padding: 16px; width: min(640px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; }
 .sheet-box h2 { margin: 0 0 8px; font-size: 20px; }
 .shop-list { list-style: none; padding: 0; margin: 8px 0; display: grid; gap: 6px; }
 .shop-item { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: 10px; padding: 8px 10px; }
@@ -182,6 +182,10 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 #office { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
 #office canvas { flex: none; }
 .office-strip { flex: 0 0 240px; margin: 0; }
+/* A wide panel with room below: the strip under the office (office.js fit() decides), so the office fills the panel. */
+#office.office-stacked { flex-direction: column; align-items: center; }
+#office.office-stacked .office-strip { flex: none; align-self: stretch; margin: 6px 0 0; min-height: 4.4em; }
+#office.office-stacked .thoughts li:nth-child(n + 4) { display: none; }
 /* Nobody picked: the staff's latest thoughts, newest first (three on a narrow screen). */
 .thoughts { list-style: none; margin: 6px 0 8px; padding: 0; display: grid; gap: 8px; font-size: 13px; line-height: 1.35; overflow-wrap: anywhere; }
 /* A chat message: the writer's small head on the left, their name and when above the words (like a team chat). */
@@ -248,7 +252,7 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 .card-name { flex: 1; min-width: 0; }
 .card-name h2 { overflow-wrap: anywhere; }
 .edit-btn { flex: none; align-self: flex-start; font-weight: 700; letter-spacing: .04em; }
-.edit-box { width: min(760px, 100%); }
+.edit-box { width: min(760px, calc(100vw - 32px)); }
 .edit-label { font-weight: 600; }
 
 /* TOMLIN's look editor, in this page's colours. */

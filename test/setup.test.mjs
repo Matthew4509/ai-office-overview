@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { apply, status, onHook, withOurs, withoutOurs, hookCommand } from '../src/setup.mjs';
+import { apply, status, onHook, withOurs, withoutOurs, hookCommand, UNSAFE_HOOK_PATH } from '../src/setup.mjs';
 import { Office } from '../src/office.mjs';
 import { tempHome, lines, ROOT } from './helpers.mjs';
 
@@ -152,4 +152,22 @@ test('the hook script ends cleanly and prints nothing when the office is closed'
   const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'hook.mjs'), '1', '--ai-office-overview-hook'], { input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'x' }), timeout: 5000 });
   assert.equal(r.status, 0);
   assert.equal(String(r.stdout), '');
+});
+
+test('a folder path with $, a backtick, a " or % is refused for advanced setup, and the settings file is not touched', () => {
+  const h = tempHome();
+  try {
+    const file = withSettings(h, '{}');
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    for (const bad of ['C:\\x\\%PATH%\\hook.mjs', 'C:\\x\\$(calc)\\hook.mjs', 'C:\\x\\`calc`\\hook.mjs', 'C:\\x\\a"b\\hook.mjs']) {
+      const r = apply(office, { advanced: true }, { port: 8860, hookScript: bad });
+      assert.match(r.error?.fault || '', /cannot be turned on/);
+      assert.ok(r.error.wayOut);
+    }
+    assert.equal(fs.readFileSync(file, 'utf8'), '{}');
+    assert.equal(UNSAFE_HOOK_PATH.test('C:\\x\\ai office overview\\hook.mjs'), false);
+  } finally {
+    delete process.env.AI_OFFICE_SETTINGS;
+    h.done();
+  }
 });

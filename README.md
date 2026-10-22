@@ -37,10 +37,12 @@ start also opens the office: the purse counts from then on.
   the rooms and the beach too. Until one is picked the office is light.
 - **Projects** (down the left; above the office on a narrower window): All projects, then every project with a thread
   today, with how many people are working, thinking, need you, or have finished. Click one to show only that project.
+  When everyone sits in one project and no projects folder is set, a line under the list asks "Are your projects in
+  one folder? Choose it": Choose it opens Setup at the projects folder box.
 - **The office** (or **List**, the same in words): click a person to open their card. What the person picked is doing
   shows to the right of the office (under it on a narrow screen). On a wide window the page itself does not scroll:
   the middle and the right panel each scroll on their own.
-- **Ticks under the tabs** (with the office): **Show names** (the staff's names), **PC name** (the project's name above
+- **Ticks under the tabs** (with the office): **Show names** (the staff's names), **Project on screens** (the project's name above
   each desk's computer) and **Show general chit-chat** (the office banter in Thoughts; unticked, Thoughts keeps only what
   the threads are doing). All three are ticked until you untick them. Kept in this
   browser.
@@ -57,7 +59,7 @@ start also opens the office: the purse counts from then on.
   who goes home stays at the office instead: they lie on a beach towel until their next thread starts, then walk back
   to their desk. The star belongs to the seat, so the next handover thread in that seat is a favourite too. A
   favourite who has gone home has a small **Hide** box (off the tab and the beach; "Show hidden" brings them back).
-- **Staff rewards** (right panel, second tab; "tokens to spend" at the top right opens it): the shop that furnishes the
+- **Staff rewards** (right panel, second tab; "Spending balance" at the top right opens it): the shop that furnishes the
   office. The meeting room and the lounge start locked: dark, with a padlock on the door. Click one to see what it costs
   and unlock it (the lounge 10M tokens, the meeting room 20M). Until then Staff rewards says "Room not available" for
   it, with an Unlock button, instead of its furniture.
@@ -77,18 +79,24 @@ start also opens the office: the purse counts from then on.
 - **Thoughts** (beside the office): the office chat. Each seat has its own character (shown on their card), with lines
   for what really happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped
   reply, a bug found, working late, two at one desk. Only the kind of event (and a file's short name for "the same
-  file again") is used, never text from your threads. **Setup › Thoughts chat** picks Everything, Work only (no office
-  chat) or Off.
+  file again") is used, never text from your threads. A push on a Friday or at the weekend, and failed tests on a
+  Monday, get their own lines; "It worked on my desk." always gets its answer; on a Thursday the staff compare their pay
+  (their real tokens today). The same words from several people at once ("Thinking it through…") show once, under all
+  their names. **Setup › Thoughts chat** picks Everything, Work only (no office chat) or Off.
 
 ## Updating
 
 Setup › Update › **Check for a newer version** asks GitHub once (nothing about you is sent) and lists what is new.
 **Update now** takes it and restarts the office; your `data/` folder is never touched. It works for a copy made with
 `git clone https://github.com/Matthew4509/ai-office-overview.git`; a downloaded zip cannot update itself (download the
-new one and copy your `data/` folder across). It refuses, and changes nothing, when files in the folder were changed.
+new one and copy your `data/` folder across). It refuses, and changes nothing, when files in the folder were changed,
+or when it would replace a file of yours that git ignores. Restart waits while an update is being taken.
 
 ## The rules
 
+- **The projects folder** is the one set in Setup. Until one is set, the office guesses it from where threads started:
+  the folder most of them started in or, when they started in sibling folders (Claude opened in each project's own
+  folder), the folder those sit in.
 - **One person per thread.** Their desk is the project folder they write files in. With no files written yet, it is
   the folder their first message says START HERE in, then the folder they are working in.
 - **Consultants.** Work in the projects folder itself, or in two or more projects (an audit), makes a Consultant.
@@ -113,6 +121,8 @@ new one and copy your `data/` folder across). It refuses, and changes nothing, w
   (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
   straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
   takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing.
+  It is refused when the office's folder path holds a `$`, a backtick, a `"` or a `%`, which the hook runner would read
+  as part of a command: move the office to a plainer folder first.
 
 ## Helping someone set it up
 

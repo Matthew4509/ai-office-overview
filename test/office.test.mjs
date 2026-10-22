@@ -248,3 +248,53 @@ test('a damaged ledger, seats or settings file is copied aside before anything i
     h.done();
   }
 });
+
+/** An office with no projects folder set: it has to guess one from where the threads started. */
+function guessing(h, nowMin) {
+  const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts, now: () => at(nowMin) });
+  office.scan();
+  return office;
+}
+
+test('threads started in four sibling project folders: the guess is their parent, and each is its own project', () => {
+  const h = tempHome();
+  try {
+    const names = ['harbour', 'garden', 'ledger', 'atlas'];
+    names.forEach((n, i) => {
+      for (const k of [1, 2]) {
+        const cwd = `${ROOT}\\${n}`;
+        lines(`${n}${k}`).prompt(i, 'go', cwd).tool(i + 1, 'Write', { file_path: `${cwd}\\src\\a${k}.js` }, 10, cwd).write(file(h, `${n}${k}`));
+      }
+    });
+    const office = guessing(h, 10);
+    assert.equal(office.root(), ROOT);
+    assert.deepEqual(office.snapshot().projects.map((p) => p.folder).sort(), [...names].sort());
+  } finally {
+    h.done();
+  }
+});
+
+test('threads started in the projects folder itself keep it as the guess, even with one thread in a sibling folder', () => {
+  const h = tempHome();
+  try {
+    for (const k of [1, 2, 3]) lines(`r${k}`).prompt(0, 'go').tool(1, 'Write', { file_path: `${ROOT}\\p${k}\\a.md` }).write(file(h, `r${k}`));
+    lines('notes').prompt(0, 'go', 'C:\\Work\\notes').tool(1, 'Write', { file_path: 'C:\\Work\\notes\\a.md' }, 10, 'C:\\Work\\notes').write(file(h, 'notes'));
+    assert.equal(guessing(h, 5).root(), ROOT);
+  } finally {
+    h.done();
+  }
+});
+
+test('one project folder alone stays the guess (the page then asks for the projects folder); a set folder always wins', () => {
+  const h = tempHome();
+  try {
+    const cwd = `${ROOT}\\garden`;
+    lines('g1').prompt(0, 'go', cwd).tool(1, 'Write', { file_path: `${cwd}\\a.md` }, 10, cwd).write(file(h, 'g1'));
+    const office = guessing(h, 5);
+    assert.equal(office.root(), cwd);
+    office.settings.root = 'C:\\Elsewhere';
+    assert.equal(office.root(), 'C:\\Elsewhere');
+  } finally {
+    h.done();
+  }
+});

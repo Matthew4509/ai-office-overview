@@ -53,7 +53,7 @@
     if (s < 60) return 'just now';
     if (s < 3600) return `${Math.round(s / 60)} min ago`;
     if (s < 86400) return `${Math.round(s / 3600)} h ago`;
-    return `${Math.round(s / 86400)} days ago`;
+    { const d = Math.round(s / 86400); return `${d} ${d === 1 ? 'day' : 'days'} ago`; }
   }
   function lasted(ms) {
     if (!ms) return '';
@@ -91,6 +91,14 @@
     box.hidden = false;
   }
   app.showFault = showFault;
+  /** A fault in one line with its way out (what went wrong, why, what to do), for a window's status line. Every window
+   * says it this way, so no error is left without a next step. */
+  app.faultText = (e) => {
+    const f = e?.error || {};
+    if (f.fault) return `${f.fault} ${f.reason || ''} ${f.wayOut || ''}`.replace(/\s+/g, ' ').trim();
+    if (typeof e?.error === 'string') return e.error;
+    return 'The office did not answer. Check that the AI Office Overview window is still open (or start it again), then try again.';
+  };
 
   async function api(url, body) {
     const r = await fetch(url, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
@@ -104,8 +112,8 @@
    * 'off'. Kept in this browser. */
   app.chatMode = () => { try { const m = localStorage.getItem('ai-office-chat'); return m === 'work' || m === 'off' ? m : 'all'; } catch { return 'all'; } };
   app.setChatMode = (m) => { try { localStorage.setItem('ai-office-chat', m); } catch { /* fine */ } window.officeView?.refresh?.(); draw(); };
-  // Under the tabs: Show names (the staff's names in the office) and PC name (the project's name above each desk's
-  // computer), both on until unticked, to see the staff better or for a screenshot. Kept in this browser only.
+  // Under the tabs: Show names (the staff's names in the office) and Project on screens (the project's name above
+  // each desk's computer), both on until unticked, to see the staff better or for a screenshot. Kept in this browser only.
   const remembered = (k) => { try { return localStorage.getItem(k) !== 'off'; } catch { return true; } };
   app.showNames = remembered('ai-office-show-names');
   app.showPcName = remembered('ai-office-show-pc-name');
@@ -136,12 +144,24 @@
     const items = [row(app.project === null, () => pickProject(null), `All projects (${prs.length})`, null, 'Show everyone in every project'),
       ...prs.map((pr) => row(app.project === pr.folder, () => pickProject(pr.folder), projectName(pr.folder), counts(pr),
         `${projectName(pr.folder)}: ${pr.people.length} ${pr.people.length === 1 ? 'person' : 'people'}`))];
+    // The projects folder is a guess until it is set: everyone in one project usually means the guess is wrong (Claude
+    // opened in one project's own folder), so ask once, under the list, until it is chosen in Setup.
+    const st = app.data.setup || {};
+    const oneProject = !st.rootSet && app.data.people.length && new Set(app.data.people.map((p) => p.folder)).size <= 1;
+    const choose = () => {
+      document.getElementById('open-setup').click();
+      const input = document.querySelector('#setup input[aria-label="Projects folder"]');
+      input?.focus();
+      input?.select();
+    };
     swap(nav, el('h2', { id: 'filter-title', text: 'Projects' }), el('ul', { class: 'filter-list' }, ...items),
-      prs.length ? null : el('p', { class: 'empty', text: 'No threads today yet.' }));
+      prs.length ? null : el('p', { class: 'empty', text: 'No threads today yet.' }),
+      oneProject ? el('p', { class: 'note root-hint', title: `The office guessed ${st.root || 'no folder yet'}.` }, 'Are your projects in one folder? ',
+        el('button', { type: 'button', class: 'btn link', onclick: choose }, 'Choose it')) : null);
   }
 
-  /** One row under the tabs, above the office: Show names (the staff's names), PC name (the project's name above each
-   * desk's computer) and Show general chit-chat (the office chat: unticked, Thoughts keeps only what the threads are
+  /** One row under the tabs, above the office: Show names (the staff's names), Project on screens (the project's name
+   * above each desk's computer) and Show general chit-chat (the office chat: unticked, Thoughts keeps only what the threads are
    * doing, as Work only in Setup). Shown with the office only. All three are on until unticked. */
   function drawViewTicks() {
     const row = document.getElementById('view-ticks');
@@ -153,7 +173,7 @@
     const focused = [...row.querySelectorAll('input')].indexOf(document.activeElement);
     const drawn = swap(row,
       tick('Show names', app.showNames, 'The staff\'s names under them in the office', (on) => { app.showNames = on; keep('ai-office-show-names', on); window.officeView?.refresh?.(); }),
-      tick('PC name', app.showPcName, 'The project\'s name above each desk\'s computer', (on) => { app.showPcName = on; keep('ai-office-show-pc-name', on); window.officeView?.refresh?.(); }),
+      tick('Project on screens', app.showPcName, 'The project\'s name above each desk\'s computer', (on) => { app.showPcName = on; keep('ai-office-show-pc-name', on); window.officeView?.refresh?.(); }),
       tick('Show general chit-chat', app.chatMode() === 'all', 'The office banter in Thoughts. Unticked, Thoughts keeps only what the threads are doing (Setup also has Off)', (on) => app.setChatMode(on ? 'all' : 'work')));
     if (drawn && focused >= 0) row.querySelectorAll('input')[focused]?.focus();
   }
@@ -409,8 +429,8 @@
     const shop = app.data.shop;
     if (!shop) { b.hidden = true; return; }
     b.hidden = false;
-    b.textContent = `${tokens(shop.purse.left)} tokens to spend`;
-    b.title = 'Open Staff rewards';
+    b.textContent = `Spending balance ${tokens(shop.purse.left)}`;
+    b.title = 'Tokens the AI has written since the office opened, less what was spent: open Staff rewards to spend them';
   }
 
   function draw() {
@@ -533,8 +553,9 @@
   app.openWindow = openWindow;
   app.closeWindow = closeWindow;
 
-  // The windows (Setup, EDIT, and the office's own): Tab and Shift+Tab stay inside the open one, and closing it (Close,
-  // Escape, a click beside it) puts the focus back on what opened it, for keyboard and screen reader use.
+  // The windows (Setup, EDIT, and the office's own): opening one moves the focus into it, Tab and Shift+Tab stay inside
+  // the open one, and closing it (Close, Escape, a click beside it) puts the focus back on what opened it, for keyboard
+  // and screen reader use.
   const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), summary, [tabindex]:not([tabindex="-1"])';
   let lastOutside = null;
   document.addEventListener('focusin', (e) => { if (!e.target.closest?.('.sheet')) lastOutside = e.target; });
@@ -543,6 +564,19 @@
     const b = e.target.closest?.('button, a[href], summary, [tabindex]');
     if (b && !b.closest('.sheet')) lastOutside = b;
   }, true);
+  // Into a window that just opened: a box marked autofocus, else its first text field, else its main button, else the
+  // window itself (read out by its title). Nothing moves when the focus is already inside it.
+  function focusInto(sheet) {
+    if (sheet.hidden || sheet.contains(document.activeElement)) return;
+    const shown = (n) => n && n.offsetParent !== null;
+    const field = [...sheet.querySelectorAll('[autofocus], input:not([type=checkbox]):not([type=radio]):not([type=file]):not([disabled]), textarea:not([disabled])')].find(shown);
+    const main = [...sheet.querySelectorAll('.sheet-foot .btn.primary:not([disabled])')].find(shown);
+    const box = sheet.querySelector('.sheet-box');
+    const to = field || main || box;
+    if (!to) return;
+    if (to === box && !box.hasAttribute('tabindex')) box.setAttribute('tabindex', '-1');
+    to.focus({ preventScroll: true });
+  }
   for (const id of ['setup', 'edit', 'check']) {
     const sheet = document.getElementById(id);
     if (!sheet) continue;
@@ -551,11 +585,23 @@
     let back = null;
     new MutationObserver(() => {
       const open = isOpen();
-      if (open && !wasOpen) back = lastOutside;
+      if (open && !wasOpen) {
+        back = lastOutside;
+        setTimeout(() => focusInto(sheet), 0);
+      }
       if (!open && wasOpen) {
         const was = back;
         back = null;
-        if (was?.isConnected && !was.disabled && !document.querySelector('.sheet:not([hidden]) .sheet-box')) was.focus();
+        // A tile drawn again meanwhile has a new button in the old one's place, found by what it does and for whom; one
+        // greyed for a moment (Starting…) is waited for, up to two seconds.
+        const sel = was?.dataset?.act ? `[data-act="${CSS.escape(was.dataset.act)}"][data-id="${CSS.escape(was.dataset.id || '')}"]` : '';
+        const giveBack = (tries) => {
+          if (document.querySelector('.sheet:not([hidden]) .sheet-box')) return;
+          const to = was?.isConnected ? was : sel ? document.querySelector(sel) : null;
+          if (to?.isConnected && !to.disabled) to.focus();
+          else if (tries > 0 && (to || sel)) setTimeout(() => giveBack(tries - 1), 200);
+        };
+        giveBack(10);
       }
       wasOpen = open;
     }).observe(sheet, { attributes: true, attributeFilter: ['hidden'], childList: true });

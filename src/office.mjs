@@ -6,12 +6,17 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { emptyThread, readFrom, localDay } from './transcript.mjs';
-import { folderOf, stateOf, assignSeats, defaultName, projectOf } from './people.mjs';
+import { folderOf, stateOf, assignSeats, defaultName, projectOf, normPath } from './people.mjs';
 import { cleanLook } from './look.mjs';
 import { AppLinks } from './applinks.mjs';
 
+
 /** How long a finished thread on the Needs attention list stays there. */
 const WAITING_DAYS = 7;
+/** Names that would reach Object.prototype if used as a key in the office's plain-object records (seats, hooks, done):
+ * a folder or thread called one of these is refused. */
+const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+export const safeKey = (k) => !UNSAFE_KEYS.has(String(k));
 /** Bump when the summary's shape changes: the cache is then read again from the start. */
 const CACHE_VERSION = 5;
 
@@ -150,13 +155,42 @@ export class Office {
     return 1;
   }
 
-  /** The projects folder: the setting, else the folder most threads started in. */
+  /**
+   * The projects folder: the setting, else a guess from where threads started. The folder most threads started in,
+   * unless they started in sibling folders (Claude opened in each project's own folder): then their parent, so each
+   * project is its own. The siblings win when they (with threads started in the parent itself) are as many as the top
+   * folder's, or when there are two or more of them and the top folder's own threads work in one folder at most (it is a
+   * project, not a projects folder).
+   */
   root() {
     if (this.settings.root) return this.settings.root;
-    const count = {};
-    for (const r of Object.values(this.files)) if (!r.parent && r.t.startCwd) count[r.t.startCwd] = (count[r.t.startCwd] || 0) + 1;
-    const best = Object.entries(count).sort((a, b) => b[1] - a[1])[0];
-    return best ? best[0] : '';
+    const starts = new Map();
+    for (const r of Object.values(this.files)) {
+      if (r.parent || !r.t.startCwd) continue;
+      const k = normPath(r.t.startCwd);
+      const s = starts.get(k) || starts.set(k, { at: r.t.startCwd, n: 0, threads: [] }).get(k);
+      s.n++;
+      s.threads.push(r.t);
+    }
+    const [key, best] = [...starts].sort((a, b) => b[1].n - a[1].n)[0] || [];
+    if (!best) return '';
+    const up = (p) => p.slice(0, Math.max(p.lastIndexOf('/'), 0));
+    const parentKey = up(key);
+    if (!parentKey || parentKey === key) return best.at;
+    let others = starts.get(parentKey)?.n || 0;
+    let siblings = 0;
+    for (const [k, s] of starts) if (k !== key && up(k) === parentKey) { siblings++; others += s.n; }
+    if (!siblings) return best.at;
+    const parent = best.at.replace(/[\\/]+$/, '').replace(/[\\/][^\\/]*$/, '') || '/';
+    const asRoot = /^[a-z]:$/i.test(parent) ? `${parent}\\` : parent;
+    if (others >= best.n) return asRoot;
+    const worksIn = new Set();
+    for (const t of best.threads) {
+      for (const p of t.wrote || []) worksIn.add(projectOf(p, best.at));
+      for (const r of t.ran || []) worksIn.add(projectOf(r.cwd, best.at, [], true));
+    }
+    worksIn.delete(null);
+    return siblings >= 2 && worksIn.size < 2 ? asRoot : best.at;
   }
 
   /** The folders in the projects folder, as they are spelt on disk. */
@@ -166,7 +200,7 @@ export class Office {
 
   /** Remembers a hook event (advanced setup) for a thread. */
   hook(id, kind, words = '') {
-    if (!id) return;
+    if (!id || !safeKey(id)) return;
     const now = this.now();
     this.hooks[id] = { kind, words, at: now };
     for (const [k, h] of Object.entries(this.hooks)) if (h.at <= now - HOOK_KEEP_MS) delete this.hooks[k];
@@ -175,12 +209,14 @@ export class Office {
 
   setNickname(folder, seat, nick) {
     const f = String(folder ?? '');
+    if (!safeKey(f)) return false;
     const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
     const name = String(nick || '').replace(/\s+/g, ' ').trim().slice(0, 40);
     this.seatNames[f] = this.seatNames[f] || {};
     if (name) this.seatNames[f][s] = { ...(this.seatNames[f][s] || {}), nick: name };
     else if (this.seatNames[f][s]) delete this.seatNames[f][s].nick;
     writeJson(this.file('seats.json'), this.seatNames);
+    return true;
   }
 
   /**
@@ -190,6 +226,7 @@ export class Office {
    */
   setFavourite(folder, seat, on) {
     const f = String(folder ?? '');
+    if (!safeKey(f)) return false;
     const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
     this.seatNames[f] = this.seatNames[f] || {};
     const rec = { ...(this.seatNames[f][s] || {}) };
@@ -198,6 +235,7 @@ export class Office {
     delete rec.favHidden;
     this.seatNames[f][s] = rec;
     writeJson(this.file('seats.json'), this.seatNames);
+    return true;
   }
   setFavouriteProject(folder, on) {
     const f = String(folder ?? '');
@@ -209,6 +247,7 @@ export class Office {
   }
   setFavouriteHidden(folder, seat, hidden) {
     const f = String(folder ?? '');
+    if (!safeKey(f)) return false;
     const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
     this.seatNames[f] = this.seatNames[f] || {};
     const rec = { ...(this.seatNames[f][s] || {}) };
@@ -216,11 +255,13 @@ export class Office {
     else delete rec.favHidden;
     this.seatNames[f][s] = rec;
     writeJson(this.file('seats.json'), this.seatNames);
+    return true;
   }
 
   /** A seat's look (EDIT on the card): a checked look, or null for the made-up one again. Answers false if refused. */
   setLook(folder, seat, look) {
     const f = String(folder ?? '');
+    if (!safeKey(f)) return false;
     const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
     this.seatNames[f] = this.seatNames[f] || {};
     const rec = { ...(this.seatNames[f][s] || {}) };
@@ -247,8 +288,8 @@ export class Office {
 
   /** Takes a thread off the Needs attention list until it needs you again (a new reply, or a new hook event). */
   markDone(id) {
+    if (!safeKey(id) || !Object.hasOwn(this.ledger.threads, id)) return false;
     const rec = this.ledger.threads[id];
-    if (!rec) return false;
     this.done[id] = this.needKey(id, rec.lastAt);
     writeJson(this.file('done.json'), this.done);
     return true;

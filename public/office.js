@@ -721,6 +721,20 @@
       if (who) (i === 0 ? say(who, l.text, 4) : think(who, l.text));
     });
   }
+  /** Payday: on a Thursday (this PC's clock), once, when two or more are in with different earnings today, they compare
+   * pay in the chat (officeBanter.payday). Not straight away: a small chance on each refresh, so it lands during the day. */
+  function paydayChat() {
+    const B = window.officeBanter;
+    const now = new Date();
+    if (!B?.payday || chatMode() !== 'all' || now.getDay() !== 4 || world.paydayOn === now.toDateString()) return;
+    if (clock() - (world.banterAt ?? -Infinity) < BANTER_GAP || Math.random() > 0.05) return;
+    const crew = present().filter((p) => p.row);
+    const lines = B.payday(crew.map((p) => ({ name: p.row.name, today: p.row.today })));
+    if (!lines.length) return;
+    world.paydayOn = now.toDateString();
+    world.banterAt = clock();
+    lines.forEach((l, i) => (i === 0 ? say(crew[l.by], l.text, 4) : think(crew[l.by], l.text)));
+  }
   function atWork(words, doing) {
     if (doing === 'thinking') return 'Thinking it through…';
     const w = String(words || '').trim();
@@ -776,6 +790,7 @@
       idleFor: p.state === 'idle' && p.since ? Math.max(0, (nowMs - p.since) / 1000) : null,
       snag: p.state !== 'home' ? p.snag || null : null,
       event: p.state !== 'home' ? p.event || null : null,
+      today: p.today || 0,
     }));
     placeDesks();
     const ids = new Set(world.staff.map((s) => s.id));
@@ -805,11 +820,11 @@
       const freshSnag = p.row && !snap && snagAt && snagAt !== p.row.snag?.at && nowMs - Date.parse(snagAt) < 120000;
       if (freshSnag) banter(p, { kind: s.snag.kind === 'bug' ? 'bug' : 'failed' });
       if (freshSnag && s.snag.run >= BIG_BUG) callCouncil(p);
-      // Something measured in their thread: tests passed or failed, a commit or a push (on a Friday, its own lines), the
-      // same file edited again, a reply you stopped.
+      // Something measured in their thread: tests passed or failed, a commit or a push (a Friday or weekend push, and
+      // failed tests on a Monday, have their own lines: officeBanter.dayKind), the same file edited again, a reply you stopped.
       const eventAt = s.event?.at || '';
       if (p.row && !snap && eventAt && eventAt !== p.row.event?.at && nowMs - Date.parse(eventAt) < 120000) {
-        banter(p, s.event.kind === 'push' && new Date(eventAt).getDay() === 5 ? { ...s.event, kind: 'push-friday' } : s.event);
+        banter(p, window.officeBanter?.dayKind?.(s.event, eventAt) ?? s.event);
       }
       // Working late (11 pm to 5 am on this PC's clock): once a night each.
       const night = new Date(Date.now() - 5 * 3600e3).toDateString();
@@ -834,6 +849,7 @@
       if (snap) { world.pairAt[d.key] ??= clock(); continue; }
       if (clock() - (world.pairAt[d.key] ?? -Infinity) > 1800) { world.pairAt[d.key] = clock(); banter(busy[0], { kind: 'pair' }); }
     }
+    if (!snap) paydayChat();
     // Gone home (or not in the project picked): they walk out of the front door; picking a project just hides them.
     for (const [id, p] of world.people) {
       if (ids.has(id) || p.leaving) continue;
@@ -1745,7 +1761,7 @@
         box(c, x - mw / 2 + 3, d.y + 7, mw - 6, 7, 2, '#fff7e9', INK, 2);
       });
       for (const fr of friendsOf(d)) (fr.kind === 'duck' ? duck(c, fr.x, fr.y, FRIEND_SIZE, 'west') : fr.kind === 'cactus' ? cactus(c, fr.x, fr.y, CACTUS_SIZE) : petRock(c, fr.x, fr.y, FRIEND_SIZE));
-      // The project's name above its computer, unless PC name is unticked (to see the staff better).
+      // The project's name above its computer, unless Project on screens is unticked (to see the staff better).
       if (full && app()?.showPcName !== false) {
         const size = labelSize(c) * 0.85;
         const words = fitText(c, d.name, 150, size);
@@ -2043,6 +2059,11 @@
 
   // ---- The view ----
 
+  /** The strip's width beside the office, and the room kept for it (three thoughts) when it sits under the office. */
+  const STRIP_W = 240;
+  const STRIP_UNDER = 200;
+  const NARROW = window.matchMedia('(max-width: 700px)');
+
   function fit(view) {
     const cv = view.canvas;
     const ratio = Math.min(2, window.devicePixelRatio || 1);
@@ -2068,6 +2089,20 @@
         : 90;
       room = Math.max(260, window.innerHeight - top - Math.ceil(below) - 1);
     }
+    // A wide panel where the strip beside the office would leave it small (held by the width, with room to spare
+    // below): the strip goes under the office instead, so the office fills the panel (X-08).
+    if (view.strip && !NARROW.matches) {
+      const bcss = getComputedStyle(box);
+      const gap = parseFloat(bcss.columnGap) || 14;
+      // Under the office already: what the strip really takes (its thoughts can wrap), else a fair guess.
+      const strip = box.classList.contains('office-stacked') ? view.strip.offsetHeight + (parseFloat(bcss.rowGap) || 0) + (parseFloat(getComputedStyle(view.strip).marginTop) || 0) : 0;
+      const keep = Math.max(STRIP_UNDER, strip);
+      const besideW = Math.min(box.clientWidth - STRIP_W - gap, (room * W) / H);
+      const underW = Math.min(box.clientWidth, ((room - keep) * W) / H);
+      const stack = underW > besideW * 1.15;
+      box.classList.toggle('office-stacked', stack);
+      if (stack) room -= keep;
+    } else box.classList.remove('office-stacked');
     // The strip beside the office (a wide window) takes its own width and the gap out of the row.
     const css = getComputedStyle(box);
     const beside = css.display === 'flex' && css.flexDirection === 'row' && view.strip ? view.strip.offsetWidth + (parseFloat(css.columnGap) || 0) : 0;
@@ -2228,8 +2263,17 @@
       const pic = L?.portrait?.({ key: t.id, name: t.who, look: t.look }, 26);
       return el('span', { class: 'chat-head', 'aria-hidden': 'true' }, pic || t.who.charAt(0).toUpperCase());
     };
-    const list = world.thoughts.filter((t) => shownIn(t.folder)).slice(-THOUGHTS_SHOWN).map((t) => el('li', { class: `chat-msg${Date.now() - t.at < 1500 ? ' new' : ''}` }, head(t),
-      el('div', { class: 'chat-body' }, el('div', {}, el('b', { text: t.who }), el('span', { class: 'note', text: ` ${ago(t.at)}` })), el('div', { text: t.text }))));
+    // The same words from several people within 10 minutes (three "Thinking it through…") show once, at the newest,
+    // under all their names.
+    const folded = [];
+    for (const t of world.thoughts.filter((x) => shownIn(x.folder))) {
+      const i = folded.findIndex((x) => x.text === t.text && t.at - x.at < 600000);
+      const names = i < 0 ? [] : folded.splice(i, 1)[0].names.filter((n) => n !== t.who);
+      folded.push({ ...t, names: [...names, t.who] });
+    }
+    const whoAll = (n) => (n.length < 2 ? n[0] : n.length > 3 ? `${n.length} people` : `${n.slice(0, -1).join(', ')} and ${n.at(-1)}`);
+    const list = folded.slice(-THOUGHTS_SHOWN).map((t) => el('li', { class: `chat-msg${Date.now() - t.at < 1500 ? ' new' : ''}` }, head(t),
+      el('div', { class: 'chat-body' }, el('div', {}, el('b', { text: whoAll(t.names), title: t.names.join(', ') }), el('span', { class: 'note', text: ` ${ago(t.at)}` })), el('div', { text: t.text }))));
     const off = chatMode() === 'off';
     v.strip.replaceChildren(el('b', { text: 'Thoughts' }),
       off ? el('p', { class: 'note', text: 'The chat is off. Turn it on in Setup.' })
@@ -2590,8 +2634,7 @@
       }
       wake();
     } catch (e) {
-      const f = e.error || {};
-      shopSaid.textContent = f.fault ? `${f.fault} ${f.reason || ''} ${f.wayOut || ''}` : 'The office did not answer. Check that AI Office Overview is still running.';
+      shopSaid.textContent = app()?.faultText?.(e) || 'The office did not answer. Check that the AI Office Overview window is still open, then try again.';
     } finally {
       button.disabled = false;
     }
@@ -2666,8 +2709,7 @@
         shopSaid.textContent = `Energy drinks bought (${big(energy.price)} tokens): everyone buzzes for a minute.`;
         setTimeout(() => { app()?.closeWindow?.(); drinkUp(); }, 1300);
       } catch (e) {
-        const f = e.error || {};
-        show('COIN RETURNED', f.fault ? `${f.fault} ${f.reason || ''}` : 'The office did not answer. Check that AI Office Overview is still running.');
+        show('COIN RETURNED', app()?.faultText?.(e) || 'The office did not answer. Check that the AI Office Overview window is still open, then try again.');
         coin.disabled = false;
         coin.classList.remove('dropping');
       }
@@ -2717,7 +2759,7 @@
 
   window.officeView = {
     update,
-    /** Draws again now (Show names or PC name was ticked or unticked). */
+    /** Draws again now (Show names or Project on screens was ticked or unticked). */
     refresh: () => { for (const v of views) v.drawnAt = 0; wake(); },
     select: (id) => {
       world.selected = id;

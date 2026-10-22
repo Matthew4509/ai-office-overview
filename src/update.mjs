@@ -140,14 +140,24 @@ export async function check(dir, { fetch = true } = {}) {
   };
 }
 
+/** Updates being taken just now: Restart waits while one moves the office's folder (it could stop half way). */
+let pulling = 0;
+export const taking = () => pulling > 0;
+
 /** Takes the newer version: a fast-forward only, after the same checks (without asking GitHub again). */
 export async function pull(dir) {
+  pulling++;
+  try { return await pullNow(dir); } finally { pulling--; }
+}
+
+async function pullNow(dir) {
   const c = await check(dir, { fetch: false });
   if (c.error) return c;
   if (!c.behind) return no('There is nothing to take.', 'This copy is already the newest version.', 'Nothing to do.');
   if (c.changed.length) return no('Files in the office\'s folder were changed here.', `An update could overwrite them (${c.changed.slice(0, 3).join(', ')}${c.changed.length > 3 ? ', …' : ''}).`, 'Keep or undo those changes yourself, then press Update again. Your data folder is not one of them.');
   if (c.ahead) return no('This copy has its own saved changes.', `It has ${c.ahead} saved change${c.ahead === 1 ? '' : 's'} that GitHub does not, so it cannot simply move forward.`, 'Bring it up to date by hand in the office\'s folder (git pull), or ask whoever made those changes.');
-  const m = await git(dir, ['merge', '--ff-only', '--quiet', `origin/${c.branch}`], 60000);
+  // --no-overwrite-ignore: a file of yours that git ignores is never replaced by one the update brings; the merge stops.
+  const m = await git(dir, ['merge', '--ff-only', '--no-overwrite-ignore', '--quiet', `origin/${c.branch}`], 60000);
   if (!m.ok) return no('The update did not go in.', firstLine(m.err) || 'git refused it.', 'Nothing was changed. Run git pull --ff-only in the office\'s folder to see why.');
   const now = await git(dir, ['rev-parse', '--short', 'HEAD']);
   return { ok: true, from: c.at, to: now.out, took: c.behind, newVersion: c.newVersion };

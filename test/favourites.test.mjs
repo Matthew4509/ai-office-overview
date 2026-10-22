@@ -80,3 +80,23 @@ test('an old favourite can be hidden and shown again; starring again clears the 
     h.done();
   }
 });
+
+test('a folder called __proto__, constructor or prototype is refused, and nothing reaches every object', () => {
+  const h = tempHome();
+  try {
+    const office = open(h, 0);
+    for (const f of ['__proto__', 'constructor', 'prototype']) {
+      assert.equal(office.setNickname(f, 1, 'Sneaky'), false);
+      assert.equal(office.setFavourite(f, 1, true), false);
+      assert.equal(office.setFavouriteHidden(f, 1, true), false);
+      assert.equal(office.setLook(f, 1, null), false);
+    }
+    assert.equal({}[1], undefined);
+    assert.equal([0][1], undefined);
+    assert.deepEqual(Object.keys(office.seatNames), []);
+    assert.equal(office.setNickname('garden', 1, 'Sam'), true);
+    assert.equal(office.seatNames.garden[1].nick, 'Sam');
+  } finally {
+    h.done();
+  }
+});
