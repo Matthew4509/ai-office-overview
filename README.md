@@ -2,7 +2,7 @@
 
 An office that shows what your Claude Code threads are doing. Each thread is a little person at their project's desk:
 working, thinking in the meeting room, standing up with a "?" when they need you, resting when they have finished, and
-going home when they have gone quiet. The tokens Claude writes fill a purse that furnishes the office.
+going home when they have gone quiet. As your staff work, the tokens they make can be spent on office improvements.
 
 It runs on your PC only. It reads Claude Code's transcripts and never sends them anywhere.
 
