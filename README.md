@@ -16,17 +16,40 @@ locally. If you prefer that one, it's [AI Head Office Overview](https://github.c
   terminal or the browser), a built-in security audit, git backup and live-site marks, Prompts and a project planner.
   It checks the live addresses you add. Windows 10 or 11 with Edge, Node.js 22 or newer.
 
+## Install it
+
+Three ways, each for your Windows user only (no administrator needed):
+
+- **The installer** (easiest): download `AI-Office-Overview-Setup-<version>.exe` from the
+  [Releases page](https://github.com/Matthew4509/ai-office-overview/releases) and run it. It brings its own copy of
+  Node.js, puts the office in the Start menu, offers a desktop shortcut and Start with Windows, and starts the office.
+  Windows SmartScreen says "unknown publisher" the first time (More info, then Run anyway): the installer is not
+  code-signed. The office then appears under Settings › Apps, where Uninstall stops it, takes its hooks out of Claude's
+  settings, removes the shortcuts and the program, and asks before deleting the data folder. An installed copy gets a
+  new version from the Releases page (Setup › Update says so), not with git.
+- **install.cmd** in a copy of this folder (`git clone https://github.com/Matthew4509/ai-office-overview.git`, or a
+  zip): it checks Node.js 20 or newer (and offers to install it with winget), puts the office in the Start menu, asks
+  about a desktop shortcut and Start with Windows, and starts the office. Setup › Setup in the office does the
+  shortcuts too. **uninstall.cmd** undoes it (so does Setup › About › Uninstall): the office stops, the shortcuts go and
+  the hooks come out; the folder stays for you to delete.
+- **Nothing at all**: with Node.js 20 or newer, double-click **Start AI Office Overview.cmd**, or run `node server.mjs`.
+
+It is made for Windows. On macOS or Linux `node server.mjs` runs the office and its page, with no shortcuts, installer
+or Open in Claude button (not tested there).
+
 ## Start it
 
-You need Node.js 20 or newer. Double-click **Start AI Office Overview.cmd**, or run:
+Double-click **Start AI Office Overview.cmd** (or its shortcut), or run:
 
 ```
 node server.mjs
 ```
 
 The page opens by itself once the office is ready (or go to http://127.0.0.1:8860/). The very first start reads all
-your Claude transcripts once, which can take a minute: keep the window open. Later starts take about a second. The first
-start also opens the office: the purse counts from then on.
+your Claude transcripts once, which can take a minute: keep the window open (a shortcut keeps it minimised). Later
+starts take about a second. The first start also opens the office: the spending balance counts from then on. Starting it a second
+time over the same data folder says it is already running and stops. `node server.mjs --status` says whether it runs,
+and `node server.mjs --stop` stops it (uninstall.cmd and the installer use this). Setup › About › Quit stops it too.
 
 ## What you see
 
@@ -35,6 +58,9 @@ start also opens the office: the purse counts from then on.
 - **Sun, moon and auto** (top right): light, dark, or Auto, which is light from sunrise to sunset and dark at night.
   Sunrise is worked out from this PC's time zone, so nothing is asked online. Setup also has **Match Windows**. Dark dims
   the rooms and the beach too. Until one is picked the office is light.
+- **Setup** (the gear, top right) has tabs: **Setup** (the three shortcuts, then easy or advanced setup), **Office**
+  (theme, the Thoughts chat, the projects folder, the gone-home time), **Update**, **Help** and **About** (version,
+  Quit, Uninstall).
 - **Projects** (down the left; above the office on a narrower window): All projects, then every project with a thread
   today, with how many people are working, thinking, need you, or have finished. Click one to show only that project.
   When everyone sits in one project and no projects folder is set, a line under the list asks "Are your projects in
@@ -48,14 +74,15 @@ start also opens the office: the purse counts from then on.
   browser.
 - **Needs attention** (right panel, first tab): every thread whose last reply asked you something, longest waiting first. Press
   "Answered: take off the list" on the card once you have dealt with it; it comes back if they ask again.
-- **A person's card** shows their name with **EDIT** beside it (their name and look, TOMLIN's look editor; both belong
-  to the seat), **Open in Claude** (opens their thread in the Claude desktop app), their project and seat, what they are
+- **A person's card** shows their name with a **star** beside it (a favourite) and **EDIT** (their name and look,
+  TOMLIN's look editor; both belong to the seat), **Open in Claude** (opens their thread in the Claude desktop app), their project and seat, what they are
   doing now and for how long, their recent messages, their last few steps, what they asked, and **Earnings**: one line
   with today's tokens that opens to their helpers and the tokens they wrote (today, since the office opened, before it
   opened, all time).
 - **List** shows everyone as tiles (up to 5 across): picture and name, then project and what they are doing.
 - **Favourites** (third tab): each project with a favourite, its name as a subtitle and its favourite staff in a row.
-  Star a person with **Favourite** on their card, or everyone in their project with **Favourite project**. A favourite
+  Star a person with the star beside their name on their card, or everyone in their project with **Favourite
+  project**. A favourite
   who goes home stays at the office instead: they lie on a beach towel until their next thread starts, then walk back
   to their desk. The star belongs to the seat, so the next handover thread in that seat is a favourite too. A
   favourite who has gone home has a small **Hide** box (off the tab and the beach; "Show hidden" brings them back).
@@ -89,8 +116,11 @@ start also opens the office: the purse counts from then on.
 Setup › Update › **Check for a newer version** asks GitHub once (nothing about you is sent) and lists what is new.
 **Update now** takes it and restarts the office; your `data/` folder is never touched. It works for a copy made with
 `git clone https://github.com/Matthew4509/ai-office-overview.git`; a downloaded zip cannot update itself (download the
-new one and copy your `data/` folder across). It refuses, and changes nothing, when files in the folder were changed,
-or when it would replace a file of yours that git ignores. Restart waits while an update is being taken.
+new one and copy your `data/` folder across), and a copy put on the PC by the installer takes the newest installer from
+the Releases page instead (your `data/` folder is kept). It refuses, and changes nothing, when files in the folder were
+changed, when this copy has saved changes of its own, or when it would replace a file of yours that git ignores. A test
+copy (started with `AI_OFFICE_DATA` or `AI_OFFICE_TRANSCRIPTS` set) never updates. Restart waits while an update is
+being taken.
 
 ## The rules
 
@@ -110,14 +140,14 @@ or when it would replace a file of yours that git ignores. Restart waits while a
 - **Helpers** (subagents) earn for their thread only when they write files or run commands that change something.
 - **Deleted threads.** A thread deleted in Claude keeps its person, nickname and tokens: the office keeps its own record
   in `data/`.
-- **The purse** is every output token Claude writes from the day the office opened, less what was spent. Prices are
+- **The spending balance** is every output token Claude writes from the day the office opened, less what was spent. Prices are
   TOMLIN's x 20, scaled to the output tokens a day of Claude Code work writes.
 
 ## Easy or advanced setup
 
 - **Easy** (the default): the office reads the transcripts every 3 seconds. Nothing in Claude is changed. "Needs you"
   is worked out from the last reply, and a permission prompt may not show.
-- **Advanced** (Setup > Turn on advanced setup): adds three hooks to Claude Code's settings file
+- **Advanced** (Setup › Setup › Turn on advanced setup): adds three hooks to Claude Code's settings file
   (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
   straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
   takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing.
@@ -130,14 +160,21 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 
 ## Files
 
-- `server.mjs`: the small server (127.0.0.1:8860 only).
+- `server.mjs`: the small server (127.0.0.1:8860 only). Every request from the page carries a key made when the office
+  starts (a page from an earlier run reloads itself); the hook route takes a plain JSON event instead.
 - `src/transcript.mjs` reads one transcript; `src/people.mjs` has the folder, seat and state rules; `src/office.mjs`
   keeps the ledger and makes the snapshot; `src/shop.mjs` is the shop; `src/setup.mjs` does easy and advanced setup;
-  `src/update.mjs` is Setup › Update.
+  `src/update.mjs` is Setup › Update; `src/install.mjs` is the shortcuts and uninstall; `src/windows.mjs` (with
+  `src/windows/shortcut.ps1`) is every call the office makes to Windows itself.
 - `public/`: the page. `office.js` and `look.js` are adapted from TOMLIN's office and staff looks;
   `banter.js` has the office chat's characters and lines; `sun.js` works out sunrise and sunset for the Auto colours
-  (the server runs it too, so the page comes in its colours); `arcade.js` is the arcade machine's three games.
+  (the server runs it too, so the page comes in its colours); `arcade.js` is the arcade machine's three games;
+  `setup.js` is the Setup window; `app.ico` is the shortcuts' and installer's icon (made from `icon.svg` by
+  `node tools/make-icon.mjs`).
 - `hook.mjs`: the advanced-setup hook.
+- `install.cmd`, `uninstall.cmd` and `tools/setup.mjs`: the shortcuts, set up and taken away from the console.
+- `installer/`: the Windows installer. `installer\build.cmd` stages the files with this PC's Node.js and builds
+  `installer\out\AI-Office-Overview-Setup-<version>.exe` with Inno Setup 6 (`winget install --id JRSoftware.InnoSetup -e`).
 - `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
   read to.
@@ -156,6 +193,13 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 - `AI_OFFICE_TRANSCRIPTS`: where the transcripts are (default `~/.claude/projects`).
 - `AI_OFFICE_SETTINGS`: the Claude settings file advanced setup changes (default `~/.claude/settings.json`). Point it
   at a copy when testing.
+- `AI_OFFICE_APP_SESSIONS`: where the Claude desktop app's thread records are read from (the Open in Claude button).
+  Point it at an empty folder when testing.
+- `AI_OFFICE_SHORTCUT_DIR`: a folder to make the shortcuts in instead of the real Start menu, desktop and Startup
+  folders (the tests use a temp one).
+- `AI_OFFICE_OPEN=0`: `--open` opens no browser. `AI_OFFICE_INSTALL_NO_START=1`: install.cmd does not start the office
+  and uninstall.cmd does not pause. `AI_OFFICE_UPDATE_TEST=1`: a test copy may run Setup › Update (the update tests).
+- `HEAD_OFFICE`: the path of AI Head Office Overview's office folder for `tools/head-office-check.mjs`.
 
 ## Licence
 

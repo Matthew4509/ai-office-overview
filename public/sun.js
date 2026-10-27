@@ -49,10 +49,10 @@
   /** Sunrise and sunset (ms) on the local day of `now`, by NOAA's simple formulas; a day the sun does not rise or set
    * says so instead ({ polar: 'day' | 'night' }). */
   function times(now, lat, lon) {
+    // The local calendar day (not the UTC day of local noon, which is yesterday at UTC+13 and +14).
     const d = new Date(now);
-    const noon = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 12);
-    const dayStart = Date.UTC(noon.getUTCFullYear(), noon.getUTCMonth(), noon.getUTCDate());
-    const n = Math.round((dayStart - Date.UTC(noon.getUTCFullYear(), 0, 1)) / 864e5) + 1;
+    const dayStart = Date.UTC(d.getFullYear(), d.getMonth(), d.getDate());
+    const n = Math.round((dayStart - Date.UTC(d.getFullYear(), 0, 1)) / 864e5) + 1;
     const g = (2 * Math.PI / 365) * (n - 1);
     const eq = 229.18 * (0.000075 + 0.001868 * Math.cos(g) - 0.032077 * Math.sin(g) - 0.014615 * Math.cos(2 * g) - 0.040849 * Math.sin(2 * g));
     const decl = 0.006918 - 0.399912 * Math.cos(g) + 0.070257 * Math.sin(g) - 0.006758 * Math.cos(2 * g) + 0.000907 * Math.sin(2 * g) - 0.002697 * Math.cos(3 * g) + 0.00148 * Math.sin(3 * g);

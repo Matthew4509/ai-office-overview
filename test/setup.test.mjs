@@ -171,3 +171,26 @@ test('a folder path with $, a backtick, a " or % is refused for advanced setup, 
     h.done();
   }
 });
+
+test('after the office folder moves, status says the hooks no longer point here, and turning it on again fixes them', () => {
+  const h = tempHome();
+  try {
+    withSettings(h, {});
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    const old = { port: 8860, hookScript: 'C:\\old place\\ai office overview\\hook.mjs' };
+    const now = { port: 8860, hookScript: 'C:\\new place\\ai office overview\\hook.mjs' };
+    apply(office, { advanced: true }, old);
+    assert.equal(status(office, old).hookHere, true);
+    const moved = status(office, now);
+    assert.equal(moved.mode, 'advanced');
+    assert.equal(moved.hookHere, false);
+    assert.equal(status(office, { ...now, hookScript: old.hookScript, port: 8865 }).hookHere, false, 'another port too');
+    const again = apply(office, { advanced: true }, now);
+    assert.equal(again.ok, true);
+    assert.equal(again.status.hookHere, true);
+    assert.equal(status(office).hookHere, null, 'not asked without a place');
+  } finally {
+    delete process.env.AI_OFFICE_SETTINGS;
+    h.done();
+  }
+});

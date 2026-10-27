@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { swapIn } from './files.mjs';
 
 /** The hook events advanced setup adds, and what each tells the office. */
 export const EVENTS = ['UserPromptSubmit', 'Notification', 'Stop'];
@@ -66,13 +67,18 @@ export function withOurs(data, command) {
   return out;
 }
 
-/** Whether advanced setup is on, from the AI app's settings file. */
-export function status(office) {
+/** Whether advanced setup is on, from the AI app's settings file. With { port, hookScript }, also whether every one of
+ * the office's hooks still names this folder and port (hookHere): after the folder is moved, the hooks still point at
+ * the old place and run a failing script on every event until they are written again. */
+export function status(office, { port, hookScript } = {}) {
   const file = settingsFile();
   const r = readSettings(file);
-  const on = !r.error && Object.values(r.data.hooks || {}).some((groups) => Array.isArray(groups) && groups.some((g) => Array.isArray(g?.hooks) && g.hooks.some(isOurs)));
+  const ours = r.error ? [] : Object.values(r.data.hooks || {}).flatMap((groups) => (Array.isArray(groups) ? groups.flatMap((g) => (Array.isArray(g?.hooks) ? g.hooks.filter(isOurs) : [])) : []));
+  const on = ours.length > 0;
+  const want = hookScript ? hookCommand(hookScript, port) : null;
   return {
     mode: on ? 'advanced' : 'easy',
+    hookHere: on && want ? ours.every((h) => h.command === want) : null,
     settingsFile: file,
     readable: !r.error,
     lastHookAt: office.lastHookAt || 0,
@@ -110,8 +116,8 @@ export function apply(office, b, { port, hookScript }) {
     }
     const tmp = `${file}.${process.pid}.tmp`;
     fs.writeFileSync(tmp, text);
-    fs.renameSync(tmp, file);
-    return { ok: true, backup, status: status(office) };
+    swapIn(tmp, file);
+    return { ok: true, backup, status: status(office, { port, hookScript }) };
   } catch (e) {
     return { error: { fault: 'Claude\'s settings could not be changed.', reason: String(e?.message || e), wayOut: 'Check the file is not open elsewhere and that this user can write to it, then try again. Easy setup still works.' } };
   }

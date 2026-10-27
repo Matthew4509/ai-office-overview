@@ -9,14 +9,17 @@ import { emptyThread, readFrom, localDay } from './transcript.mjs';
 import { folderOf, stateOf, assignSeats, defaultName, projectOf, normPath } from './people.mjs';
 import { cleanLook } from './look.mjs';
 import { AppLinks } from './applinks.mjs';
+import { writeJson, readText } from './files.mjs';
 
 
 /** How long a finished thread on the Needs attention list stays there. */
 const WAITING_DAYS = 7;
 /** Names that would reach Object.prototype if used as a key in the office's plain-object records (seats, hooks, done):
- * a folder or thread called one of these is refused. */
+ * a folder or thread called one of these (or toString, valueOf, hasOwnProperty and the rest) is refused. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-export const safeKey = (k) => !UNSAFE_KEYS.has(String(k));
+export const safeKey = (k) => { const s = String(k); return !UNSAFE_KEYS.has(s) && !(s in Object.prototype); };
+/** The most hook events kept (one per thread id): a local program that posts made-up ids cannot grow the file without limit. */
+const HOOKS_MAX = 2000;
 /** Bump when the summary's shape changes: the cache is then read again from the start. */
 const CACHE_VERSION = 5;
 
@@ -28,32 +31,24 @@ function readJson(file, fallback) {
 }
 
 /**
- * One of the office's own files (data/). Missing: the fallback. There but unreadable, or not an object: copied aside
- * first (name.damaged-<time>.json), so the next save cannot wipe deleted threads, nicknames or the purse start.
+ * One of the office's own files (data/). Missing: the fallback. There but damaged (not JSON, or not an object): copied
+ * aside first (name.damaged-<time>.json), so the next save cannot wipe deleted threads, nicknames or the purse start.
+ * There but held by another program (an antivirus at start): tried again, then the office refuses to start rather
+ * than treat a file it could not read as damaged and write over it.
  */
 function readKept(file, fallback) {
   let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch (e) {
+  try { text = readText(file); } catch (e) {
     if (e.code === 'ENOENT') return fallback;
-    text = null;
+    throw new Error(`${path.basename(file)} in the office's data folder could not be read (${e.code || e.message}). Nothing was changed: close whatever holds it, then start the office again.`);
   }
-  if (text !== null) {
-    try {
-      const data = JSON.parse(text);
-      if (data && typeof data === 'object' && !Array.isArray(data)) return data;
-    } catch { /* copied aside below */ }
-  }
+  try {
+    const data = JSON.parse(text);
+    if (data && typeof data === 'object' && !Array.isArray(data)) return data;
+  } catch { /* copied aside below */ }
   const aside = `${file.replace(/\.json$/, '')}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
   try { fs.copyFileSync(file, aside); console.error(`[data] ${path.basename(file)} could not be read: kept a copy as ${path.basename(aside)} and started it empty.`); } catch { /* nothing to keep */ }
   return fallback;
-}
-
-/** Writes beside the file, then swaps it in, so a crash never leaves half a file. */
-function writeJson(file, data) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  const tmp = `${file}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify(data, null, 1));
-  fs.renameSync(tmp, file);
 }
 
 export class Office {
@@ -202,8 +197,13 @@ export class Office {
   hook(id, kind, words = '') {
     if (!id || !safeKey(id)) return;
     const now = this.now();
+    const had = this.hooks[id];
+    // The same event again within a second (a program posting in a loop) changes nothing and is not written again.
+    if (had && had.kind === kind && had.words === words && now - had.at < 1000) return;
     this.hooks[id] = { kind, words, at: now };
     for (const [k, h] of Object.entries(this.hooks)) if (h.at <= now - HOOK_KEEP_MS) delete this.hooks[k];
+    const ids = Object.keys(this.hooks);
+    if (ids.length > HOOKS_MAX) for (const k of ids.sort((a, b) => this.hooks[a].at - this.hooks[b].at).slice(0, ids.length - HOOKS_MAX)) delete this.hooks[k];
     writeJson(this.file('hooks.json'), this.hooks);
   }
 
@@ -313,13 +313,15 @@ export class Office {
     const root = this.root();
     const names = this.folderNames(root);
     const today = localDay(new Date(now).toISOString());
-    const helpersOf = {};
+    // Maps keyed by thread ids and folder names are made without a prototype: a folder called constructor or toString
+    // is then just a name, not Object.prototype's own.
+    const helpersOf = Object.create(null);
     const mains = [];
     for (const r of Object.values(this.files)) {
       if (r.parent) (helpersOf[r.parent] = helpersOf[r.parent] || []).push(r.t);
       else mains.push(r.t);
     }
-    const live = {};
+    const live = Object.create(null);
     for (const t of mains) {
       if (!t.startedAt) continue; // nothing said yet
       const helpers = helpersOf[t.id] || [];
@@ -344,9 +346,12 @@ export class Office {
         helpers: helpers.length,
         ...st,
       };
+      // Answered (taken off Needs attention): no longer standing with a "?" until they need you again.
+      const x = live[t.id];
+      if (x.state === 'needs' && Object.hasOwn(this.done, t.id) && this.done[t.id] === this.needKey(t.id, x.lastAt)) Object.assign(x, { state: 'idle', words: 'Answered' });
     }
     // Seats: threads still on disk, plus those only the ledger remembers (deleted in the app: they keep their seat).
-    const kept = {};
+    const kept = Object.create(null);
     for (const [id, r] of Object.entries(ledger.threads)) kept[id] = { folder: r.folder, seat: r.seat, lastAt: r.lastAt };
     const spans = Object.values(live).map((x) => ({ id: x.id, folder: x.folder, startedAt: x.startedAt, lastAt: x.lastAt, active: x.state !== 'home' }));
     for (const [id, r] of Object.entries(ledger.threads)) if (!live[id]) spans.push({ id, folder: r.folder, startedAt: r.startedAt, lastAt: r.lastAt, active: false });
@@ -361,11 +366,11 @@ export class Office {
       if (!old || JSON.stringify(old) !== JSON.stringify(rec)) { ledger.threads[x.id] = rec; if (!preview) this.dirty = true; }
     }
     // People: one per seat that has ever had a thread or a nickname.
-    const people = {};
+    const people = Object.create(null);
     const person = (folder, seat) => {
       const key = `${folder}#${seat}`;
       if (!people[key]) {
-        const kept = this.seatNames[folder]?.[seat] || {};
+        const kept = (Object.hasOwn(this.seatNames, folder) ? this.seatNames[folder]?.[seat] : null) || {};
         const nick = kept.nick || '';
         const look = kept.look || null;
         // A favourite: the seat itself, or every seat of a favourite project.
@@ -401,7 +406,7 @@ export class Office {
       }
     }
     // Projects: every folder with a thread today or one still active.
-    const projects = {};
+    const projects = Object.create(null);
     for (const p of Object.values(people)) {
       const today_ = (p.lastAt && localDay(p.lastAt) === today) || p.state !== 'home';
       if (!today_) continue;

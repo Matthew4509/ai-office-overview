@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="ai-office-key" content="__AI_OFFICE_KEY__">
 <title>AI Office Overview</title>
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
@@ -17,7 +18,7 @@
       <button type="button" role="radio" aria-checked="false" data-theme-pick="dark" title="Dark" aria-label="Dark"><svg viewBox="0 0 24 24" aria-hidden="true"><path class="fill" d="M19.5 14.6A8 8 0 0 1 9.4 4.5a8 8 0 1 0 10.1 10.1z"/></svg></button>
       <button type="button" role="radio" aria-checked="false" data-theme-pick="auto" title="Auto: light from sunrise to sunset, dark at night" aria-label="Auto, by sunrise and sunset"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="9.5" cy="12" r="3.2"/><path d="M9.5 5.2v1.6M9.5 17.2v1.6M2.7 12h1.6M4.7 7.2l1.1 1.1M4.7 16.8l1.1-1.1"/><path class="fill" d="M13.5 3.2a8.8 8.8 0 0 1 0 17.6a10.5 10.5 0 0 0 0-17.6z"/></svg></button>
     </div>
-    <button type="button" id="open-setup" class="chip">Setup</button>
+    <button type="button" id="open-setup" class="icon-btn" aria-label="Setup" title="Setup"><i class="ic" aria-hidden="true">&#xE713;</i></button>
   </div>
 </header>
 <div id="loading" class="loading" role="status" hidden><span id="loading-words"></span> <progress id="loading-bar" max="1" value="0"></progress></div>

@@ -109,7 +109,7 @@ function safeRemote(url) {
 
 /** Where this folder stands against the branch it came from, after asking GitHub (fetch: false skips the asking). */
 export async function check(dir, { fetch = true } = {}) {
-  if (!fs.existsSync(path.join(dir, '.git'))) return no('This copy cannot update itself.', 'It was not downloaded with git (a zip, perhaps), so it has no link to GitHub.', `Download the newest version from GitHub and copy your data folder across, or get it with: git clone ${REPO}`);
+  if (!fs.existsSync(path.join(dir, '.git'))) return no('This copy cannot update itself.', fs.existsSync(path.join(dir, 'node', 'node.exe')) ? 'It was put here by the installer, which has no link to GitHub.' : 'It was not downloaded with git (a zip, perhaps), so it has no link to GitHub.', fs.existsSync(path.join(dir, 'node', 'node.exe')) ? 'Download the newest installer from https://github.com/Matthew4509/ai-office-overview/releases and run it: your data folder is kept.' : `Download the newest version from GitHub and copy your data folder across, or get it with: git clone ${REPO}`);
   const bad = await gitConfigProblem(dir);
   if (bad) return no('The office did not run git in its own folder.', bad === 'program' ? 'Its git settings name a program (a filter, hook or similar).' : 'Its git settings could not be read safely.', 'Update it by hand: git pull --ff-only in the office\'s folder, after checking .git/config.');
   const branch = await git(dir, ['rev-parse', '--abbrev-ref', 'HEAD']);
@@ -172,7 +172,9 @@ export function restartAfterExit(dir) {
   const cmd = path.join(dir, 'Start AI Office Overview.cmd');
   const win = process.platform === 'win32' && fs.existsSync(cmd);
   // `start` alone would run the start file with cmd /K, which leaves the window open at a prompt after the office stops.
-  const run = win ? ['cmd.exe', '/c', 'start', '"AI Office Overview"', 'cmd.exe', '/c', `"${cmd}"`] : [process.execPath, ...process.argv.slice(1).filter((a) => a !== '--open')];
+  // cmd.exe by its full path: a bare name is looked for in the working folder first.
+  const CMD = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'cmd.exe');
+  const run = win ? [CMD, '/c', 'start', '"AI Office Overview"', CMD, '/c', `"${cmd}"`] : [process.execPath, ...process.argv.slice(1).filter((a) => a !== '--open')];
   const wait = `const pid=+process.argv[1];const go=()=>{try{process.kill(pid,0);setTimeout(go,300)}catch{require('child_process').spawn(process.argv[2],process.argv.slice(3),{detached:true,stdio:'ignore',windowsHide:${win ? 'false' : 'true'},windowsVerbatimArguments:${win},env:{...process.env,AI_OFFICE_OPEN:'0'}}).unref()}};go()`;
   spawn(process.execPath, ['-e', wait, String(process.pid), ...run], { detached: true, stdio: 'ignore', windowsHide: true, cwd: dir }).unref();
 }

@@ -27,6 +27,22 @@ test('Sydney at the December solstice: a day of about 14 h 25 min', () => {
   near(Math.round((t.set - t.rise) / 60000), 865, 12, 'day length');
 });
 
+test('a zone ahead of UTC by 13 hours (Auckland in summer) gets its own day: light at 10:00 and 14:00 local', () => {
+  const TZ = process.env.TZ;
+  process.env.TZ = 'Pacific/Auckland';
+  try {
+    const at10 = Date.UTC(2026, 0, 14, 21); // 15 Jan 10:00 in Auckland (UTC+13)
+    const t = sun.times(at10, -36.85, 174.76);
+    // Published: up about 06:15 and down about 20:45 local, that is 17:15 and 07:45 UTC.
+    near(utcMin(t.rise), 17 * 60 + 15, 15, 'sunrise');
+    near(utcMin(t.set), 7 * 60 + 45, 15, 'sunset');
+    assert.ok(t.rise < at10 && at10 < t.set, 'the sun is up at 10:00');
+    assert.ok(t.set > at10 + 4 * 3600000, 'and still up at 14:00');
+  } finally {
+    if (TZ === undefined) delete process.env.TZ; else process.env.TZ = TZ;
+  }
+});
+
 test('the far north: no sunset in June, no sunrise in December', () => {
   assert.equal(sun.times(Date.UTC(2026, 5, 21, 12), 78, 15).polar, 'day');
   assert.equal(sun.times(Date.UTC(2026, 11, 21, 12), 78, 15).polar, 'night');
@@ -93,7 +109,8 @@ test('the page comes in its theme on <html>: light until one is chosen, then the
     });
     const base = `http://127.0.0.1:${port}`;
     const tag = async (at = '/') => (await (await fetch(base + at)).text()).match(/<html lang="en" data-theme-choice="(\w+)" data-theme="(\w+)">/)?.slice(1);
-    const choose = (t) => fetch(`${base}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ theme: t }) });
+    const key = /<meta name="ai-office-key" content="([^"]+)">/.exec(await (await fetch(base)).text())[1];
+    const choose = (t) => fetch(`${base}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-ai-office-key': key }, body: JSON.stringify({ theme: t }) });
     assert.deepEqual(await tag(), ['light', 'light']);
     assert.equal((await choose('dark')).status, 200);
     assert.deepEqual(await tag(), ['dark', 'dark']);

@@ -46,6 +46,8 @@ try { list = JSON.parse(fs.readFileSync(listFile, 'utf8')); } catch (e) {
 const AREAS = ['public', 'src', 'test', 'tools'];
 const ROOT_FILES = ['hook.mjs'];
 const SKIP = new Set(['tools/head-office-check.mjs', 'tools/head-office-differences.json']);
+// Pictures and icons are not compared line by line: each app draws its own.
+const BINARY = /\.(ico|png|webp|jpg|jpeg|gif)$/i;
 function filesIn(base) {
   const out = ROOT_FILES.filter((f) => fs.existsSync(path.join(base, f)));
   for (const area of AREAS) {
@@ -55,7 +57,7 @@ function filesIn(base) {
       for (const d of names) {
         const r = `${rel}/${d.name}`;
         if (d.isDirectory()) walk(r);
-        else if (!SKIP.has(r)) out.push(r);
+        else if (!SKIP.has(r) && !BINARY.test(r)) out.push(r);
       }
     };
     walk(area);

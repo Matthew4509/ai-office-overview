@@ -100,8 +100,13 @@
     return 'The office did not answer. Check that the AI Office Overview window is still open (or start it again), then try again.';
   };
 
+  // Every request carries the key this page was served with.
+  const KEY = document.querySelector('meta[name="ai-office-key"]')?.content || '';
   async function api(url, body) {
-    const r = await fetch(url, body === undefined ? { cache: 'no-store' } : { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    const headers = { 'x-ai-office-key': KEY };
+    const r = await fetch(url, body === undefined ? { cache: 'no-store', headers } : { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    // A key from an earlier run: the office was started again, so this page is reloaded to get the new one.
+    if (r.status === 403) { setTimeout(() => location.reload(), 500); throw { error: { fault: 'The office was restarted.', reason: 'This page is from its earlier run.', wayOut: 'It reloads by itself.' } }; }
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw d.error ? d : new Error(`answer ${r.status}`);
     return d;
@@ -149,10 +154,11 @@
     const st = app.data.setup || {};
     const oneProject = !st.rootSet && app.data.people.length && new Set(app.data.people.map((p) => p.folder)).size <= 1;
     const choose = () => {
-      document.getElementById('open-setup').click();
-      const input = document.querySelector('#setup input[aria-label="Projects folder"]');
-      input?.focus();
-      input?.select();
+      app.openSetup?.('office', () => {
+        const input = document.querySelector('#setup input[aria-label="Projects folder"]');
+        input?.focus();
+        input?.select();
+      });
     };
     swap(nav, el('h2', { id: 'filter-title', text: 'Projects' }), el('ul', { class: 'filter-list' }, ...items),
       prs.length ? null : el('p', { class: 'empty', text: 'No threads today yet.' }),
@@ -311,7 +317,7 @@
       el('dl', {},
         el('dt', { text: 'Helpers' }), el('dd', { text: t ? String(t.helpers || 0) : '0' }),
         el('dt', { text: 'Today' }), el('dd', { text: `${tokens(p.today)} tokens written` }),
-        el('dt', { text: 'Earned' }), el('dd', { text: `${tokens(p.outSince)} tokens since the office opened (they go into the Staff rewards purse)` }),
+        el('dt', { text: 'Earned' }), el('dd', { text: `${tokens(p.outSince)} tokens since the office opened (they can be spent in Staff rewards)` }),
         el('dt', { text: 'Before' }), el('dd', { text: `${tokens(Math.max(0, p.out - p.outSince))} tokens before the office opened (shown, not spent)` }),
         el('dt', { text: 'All time' }), el('dd', { text: `${tokens(p.out)} tokens in ${p.threads} ${p.threads === 1 ? 'thread' : 'threads'}` })));
     const asked = (waiting || (t && t.asked)) ? el('div', { class: 'asked' }, el('b', { text: 'Asked you: ' }), (waiting?.asked || t.asked)) : null;
@@ -335,7 +341,7 @@
       side.dataset.card = p.key;
     }
     swap(head, back,
-      el('div', { class: 'card-title' }, face(p, 48), el('div', { class: 'card-name' }, el('h2', { text: p.name }), el('p', { class: 'sub', text: where(p) + (p.nick ? ` · first called ${defaultName(p)}` : '') })), edit),
+      el('div', { class: 'card-title' }, face(p, 48), el('div', { class: 'card-name' }, el('h2', { class: 'name-heading' }, p.name, personStar(p)), el('p', { class: 'sub', text: where(p) + (p.nick ? ` · first called ${defaultName(p)}` : '') })), edit),
       favRow(p), openRow(p), asked, doneBtn);
     // Their newest thread's last messages, in the order they were said (also once they have gone home).
     const r = p.recent;
@@ -346,16 +352,23 @@
     swap(live, dl, earnings, msgsHead, msgs, steps ? el('h3', { text: 'Last steps' }) : null, steps);
   }
 
-  /** The card's two stars: this person, and their whole project. */
+  const star = (on) => (on ? '★' : '☆');
+  const favToggle = (body) => async () => {
+    try { await api('/api/favourite', body()); showFault(null); await refresh(); } catch (e) { showFault(e); }
+  };
+  /** The project's star on the card: everyone in the project is a favourite. */
   function favRow(p) {
-    const star = (on) => (on ? '★' : '☆');
-    const toggle = (body) => async () => {
-      try { await api('/api/favourite', body()); showFault(null); await refresh(); } catch (e) { showFault(e); }
-    };
     const now = () => app.data.people.find((x) => x.key === p.key) || p;
-    const mine = el('button', { type: 'button', class: 'btn fav-btn', 'aria-pressed': String(!!p.favSeat), title: 'A favourite stays at the office on a beach towel after they go home, and is listed under Favourites', onclick: toggle(() => ({ folder: now().folder, seat: now().seat, on: !now().favSeat })) }, `${star(p.favSeat)} Favourite`);
-    const all = el('button', { type: 'button', class: 'btn fav-btn', 'aria-pressed': String(!!p.favProject), title: `Everyone in ${projectName(p.folder)} is a favourite`, onclick: toggle(() => ({ folder: now().folder, project: true, on: !now().favProject })) }, `${star(p.favProject)} Favourite project`);
-    return el('div', { class: 'row fav-row' }, mine, all);
+    return el('div', { class: 'row fav-row' }, el('button', { type: 'button', class: 'btn fav-btn', 'aria-pressed': String(!!p.favProject), title: `Everyone in ${projectName(p.folder)} is a favourite`, onclick: favToggle(() => ({ folder: now().folder, project: true, on: !now().favProject })) }, `${star(p.favProject)} Favourite project`));
+  }
+  /** This person's star, beside their name: filled when they are a favourite; the tooltip says what a click does. */
+  function personStar(p) {
+    const now = () => app.data.people.find((x) => x.key === p.key) || p;
+    const hint = p.favSeat
+      ? `${p.name} is a favourite: they stay at the office on a beach towel after going home, and are listed under Favourites. Click to take them off.`
+      : `Click to make ${p.name} a favourite: they stay at the office on a beach towel after going home, and are listed under Favourites.`;
+    return el('button', { type: 'button', class: 'star-btn', 'aria-pressed': String(!!p.favSeat), 'aria-label': `Favourite: ${p.name}`, title: hint,
+      onclick: favToggle(() => ({ folder: now().folder, seat: now().seat, on: !now().favSeat })) }, star(p.favSeat));
   }
 
   /** The open-thread button: their thread (the open one, else their newest) in the AI desktop app, when the app has it. */
@@ -569,7 +582,8 @@
   function focusInto(sheet) {
     if (sheet.hidden || sheet.contains(document.activeElement)) return;
     const shown = (n) => n && n.offsetParent !== null;
-    const field = [...sheet.querySelectorAll('[autofocus], input:not([type=checkbox]):not([type=radio]):not([type=file]):not([disabled]), textarea:not([disabled])')].find(shown);
+    // Not a read-only box (a copy block's text) or a hidden one: focus on those does nothing useful.
+    const field = [...sheet.querySelectorAll('[autofocus], input:not([type=checkbox]):not([type=radio]):not([type=file]):not([disabled]):not([readonly]), textarea:not([disabled]):not([readonly])')].find(shown);
     const main = [...sheet.querySelectorAll('.sheet-foot .btn.primary:not([disabled])')].find(shown);
     const box = sheet.querySelector('.sheet-box');
     const to = field || main || box;

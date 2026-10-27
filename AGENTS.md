@@ -13,6 +13,50 @@ https://github.com/Matthew4509/ai-head-office-overview. Explain the difference a
   folder, a terminal or the browser), a security audit, git backup and live-site marks, Prompts and a project planner.
   It checks the live addresses the user adds. Windows 10 or 11 with Edge, Node.js 22 or newer.
 
+## Ground rules for an agent
+- Ask the user before each step that changes their PC: installing Node.js, cloning into a folder, the shortcuts, Start
+  with Windows, advanced setup. Say what will change first. Reading and testing need no permission.
+- Never touch the office's `data` folder (names, looks, rewards, the ledger, the office's records). It is git-ignored:
+  a clone or pull never brings it and never changes it.
+- Never send anything from `data`, the transcripts or `~/.claude/settings.json` anywhere, and never paste them into a
+  report. Report what you checked, not the user's content.
+
+## Install it (first time)
+1. **Node.js:** `node --version` must say v20 or newer. If not, ask, then `winget install --id OpenJS.NodeJS.LTS -e
+   --source winget` (or point the user to https://nodejs.org). A new terminal is needed afterwards for the PATH.
+   (The installer from the Releases page brings its own Node.js: then nothing here is needed.)
+2. **Get it:** `git clone https://github.com/Matthew4509/ai-office-overview.git` into a folder whose path has no `$`,
+   backtick, `"` or `%` (advanced setup refuses one). No git? `winget install --id Git.Git -e`, or the repository's zip.
+3. **Check it before running it:** `npm test` (about 20 seconds; its data is made up and kept in temp folders, nothing
+   of the user's is read or changed).
+4. **Shortcuts (ask first):** `node tools/setup.mjs install --yes` puts the office in the Start menu, on the desktop and
+   in Start with Windows, for this Windows user only (no admin). Leave one out with `--no-desktop` or `--no-startup`.
+   `install.cmd` does the same from a double-click, asking about the two optional ones. Nothing is removed and the
+   user's data is never touched.
+5. **Start it:** `Start AI Office Overview.cmd` (or `node server.mjs --open`). `node server.mjs --status` must exit 0;
+   the page is http://127.0.0.1:8860/.
+6. Tell the user: Setup (the gear, top right) has Setup (the shortcuts, advanced setup), Office, Update, Help and About
+   (Quit, Uninstall).
+
+## Uninstall
+`uninstall.cmd`, or Setup › About › Uninstall in the office, or `node tools/setup.mjs uninstall`: the office stops, the
+three shortcuts go, and advanced setup's hooks come out of Claude's settings (a copy of the file is kept first). The
+folder and its `data` stay: the user deletes the folder themselves. A copy put on the PC by the installer is removed
+under Settings › Apps instead, which runs the same step first and asks before deleting `data`.
+
+## Review it (what it does on this PC)
+- **Listens** on 127.0.0.1 only (port 8860). Every API request needs the per-run key the page was served with; the one
+  exception, `/api/hook`, takes only a JSON event. Code: `server.mjs`.
+- **Reads:** `~/.claude/projects` (transcripts, two levels: `<folder>/*.jsonl` and `<folder>/<id>/subagents/*.jsonl`)
+  and the Claude desktop app's thread records (the Open in Claude button). It never writes to either.
+- **Writes:** its own `data` folder; `~/.claude/settings.json` only when the user turns advanced setup on or off, and
+  uninstall takes its own hooks out again (a copy is saved first each time; `src/setup.mjs`, `src/install.mjs`); the
+  shortcuts only through setup (`src/windows/shortcut.ps1`).
+- **Runs:** `git` (read-only, and fetch or merge only in its own folder) when the user presses Check or Update now
+  (`src/update.mjs`), and PowerShell for the shortcuts, both by full path.
+- **Sends:** nothing about the user. The only request that leaves the PC is a `git fetch` of this repository when the
+  user presses Setup › Update › Check. To check: search the code for `fetch(`, `http.get`, `http.request`, `git`.
+
 ## First, check the basics
 1. Node.js 20 or newer: `node --version`.
 2. The office runs: start it with `Start AI Office Overview.cmd` (Windows) or `node server.mjs` from this folder. Then open
@@ -28,8 +72,8 @@ https://github.com/Matthew4509/ai-head-office-overview. Explain the difference a
   gets a message, waits for permission, or finishes a reply.
 
 ## Turning on advanced setup: the preferred way
-Ask the user to open the office, press **Setup**, then **Turn on advanced setup**. That button does everything below
-safely:
+Ask the user to open the office, press **Setup** (the gear, top right), its **Setup** tab, then **Turn on advanced
+setup**. That button does everything below safely:
 - it saves a copy of the settings file first;
 - it keeps every hook already there and adds only its own three;
 - **Go back to easy setup** removes only those three.
@@ -68,7 +112,7 @@ The settings file is `~/.claude/settings.json` (Windows: `C:\Users\<name>\.claud
 7. Threads that are **already open** pick up new hooks only when they next start. Say so.
 
 ## Undoing it
-Use **Setup > Go back to easy setup**. By hand: remove every hook whose command contains `--ai-office-overview-hook` (or the
+Use **Setup › Setup › Go back to easy setup**. By hand: remove every hook whose command contains `--ai-office-overview-hook` (or the
 older `--claude-office-hook`), and any group or event array left empty by that, and nothing else. Hooks with other marks,
 such as AI Head Office Overview's `--ai-head-office-hook`, belong to other programs: leave them. Or restore the backup copy.
 
@@ -92,4 +136,7 @@ such as AI Head Office Overview's `--ai-head-office-hook`, belong to other progr
 - Do not change the user's existing hooks, permissions or other settings while adding these.
 - Do not send transcript text, the settings file, or the office's `data/` folder anywhere. They hold the user's own work.
 - Do not test advanced setup on the user's real settings file when a copy will do: point `AI_OFFICE_SETTINGS` at a
-  copy and `AI_OFFICE_DATA` at a scratch folder (see README, "Settings for testing").
+  copy, `AI_OFFICE_DATA` at a scratch folder, `AI_OFFICE_TRANSCRIPTS` and `AI_OFFICE_APP_SESSIONS` at made-up ones, and
+  `AI_OFFICE_SHORTCUT_DIR` at a temp folder for the shortcuts (see README, "Settings for testing").
+- Do not run `install.cmd`, `tools/setup.mjs install` or `uninstall.cmd` without the user's word: they change the Start
+  menu, the desktop, Start with Windows and (uninstall) Claude's settings file.

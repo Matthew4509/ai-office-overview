@@ -1,5 +1,5 @@
 // Lists the people the office sees, from the command line: node tools/people.mjs [--data <folder>]
-// Use a scratch --data folder to look without opening the office (the purse starts the first time data/ is made).
+// Use a scratch --data folder to look without opening the office (the spending balance starts the first time data/ is made).
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

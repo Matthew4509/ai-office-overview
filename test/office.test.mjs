@@ -298,3 +298,100 @@ test('one project folder alone stays the guess (the page then asks for the proje
     h.done();
   }
 });
+
+test('project folders named constructor or toString are just names: the snapshot works and lists them', () => {
+  const h = tempHome();
+  try {
+    for (const [id, name] of [['c1', 'constructor'], ['c2', 'toString'], ['c3', 'hasOwnProperty']]) {
+      const cwd = `${ROOT}\\${name}`;
+      lines(id).prompt(0, 'go', cwd).tool(1, 'Write', { file_path: `${cwd}\\a.md` }, 10, cwd).reply(2, 'Done.', 10, cwd).write(file(h, id));
+    }
+    const { office } = setup(h, 3);
+    office.scan();
+    const s = office.snapshot();
+    // (Folders that are not on disk are named in lower case, as always.)
+    assert.deepEqual(s.projects.map((p) => p.folder).sort(), ['constructor', 'hasownproperty', 'tostring']);
+    assert.equal(s.people.length, 3);
+    // A name or star on one is refused (it would reach every object), and nothing else breaks.
+    assert.equal(office.setNickname('toString', 1, 'Pat'), false);
+    assert.equal(office.setNickname('tostring', 1, 'Pat'), true, 'the lower-case name is not one of Object\'s');
+    assert.equal(({}).toString, Object.prototype.toString);
+  } finally {
+    h.done();
+  }
+});
+
+test('a data file another program holds at start is not taken as damaged: the office refuses to start and changes nothing', () => {
+  const h = tempHome();
+  const real = fs.readFileSync;
+  try {
+    fs.mkdirSync(h.data, { recursive: true });
+    const ledger = path.join(h.data, 'ledger.json');
+    fs.writeFileSync(ledger, '{"threads":{"t1":{"folder":"x","seat":1}}}');
+    fs.writeFileSync(path.join(h.data, 'settings.json'), '{"openedAt":"2026-10-01T00:00:00.000Z","root":"C:\\\\Work"}');
+    fs.readFileSync = function held(f, ...rest) {
+      if (String(f) === ledger) { const e = new Error('EBUSY: resource busy or locked'); e.code = 'EBUSY'; throw e; }
+      return real.call(this, f, ...rest);
+    };
+    assert.throws(() => setup(h, 3), /ledger\.json .*could not be read \(EBUSY\)/);
+    fs.readFileSync = real;
+    assert.equal(fs.readFileSync(ledger, 'utf8'), '{"threads":{"t1":{"folder":"x","seat":1}}}', 'the ledger is as it was');
+    assert.ok(!fs.readdirSync(h.data).some((n) => n.includes('.damaged-')), 'nothing was set aside as damaged');
+    assert.match(fs.readFileSync(path.join(h.data, 'settings.json'), 'utf8'), /"root"/, 'settings kept');
+  } finally {
+    fs.readFileSync = real;
+    h.done();
+  }
+});
+
+test('hook events: a burst of made-up ids keeps at most 2000, the newest', () => {
+  const h = tempHome();
+  try {
+    const { office, setNow } = setup(h, 0);
+    for (let i = 0; i < 2100; i++) { setNow(i / 1000); office.hook(`id-${i}`, 'working', 'Reading your message'); }
+    const kept = JSON.parse(fs.readFileSync(path.join(h.data, 'hooks.json'), 'utf8'));
+    assert.equal(Object.keys(kept).length, 2000);
+    assert.ok(kept['id-2099'] && !kept['id-0'], 'the oldest went first');
+  } finally {
+    h.done();
+  }
+});
+
+test('a token count from a damaged line can be neither negative nor endless', () => {
+  const h = tempHome();
+  try {
+    const raw = (n, out) => ({ type: 'assistant', timestamp: new Date(at(n)).toISOString(), cwd: ROOT, sessionId: 'z1', message: { id: `m${n}`, stop_reason: 'end_turn', usage: { output_tokens: out }, content: [{ type: 'text', text: 'ok' }] } });
+    lines('z1').prompt(0, 'go').raw(raw(1, -5000)).raw(raw(2, 1e300)).raw(raw(3, 'lots')).write(file(h, 'z1'));
+    const { office } = setup(h, 4);
+    office.scan();
+    const s = office.snapshot();
+    assert.ok(Number.isFinite(s.earned) && s.earned >= 0 && s.earned <= 1e8, `earned ${s.earned}`);
+  } finally {
+    h.done();
+  }
+});
+
+test('Answered takes a person off Needs attention and out of "Needs you" until they ask again', () => {
+  const h = tempHome();
+  try {
+    lines('q1').prompt(0, 'go').tool(1, 'Write', { file_path: OFFICE_FILE }).reply(2, 'Shall I push it now?').write(file(h, 'q1'));
+    const { office } = setup(h, 3);
+    office.scan();
+    let me = office.snapshot().people.find((p) => p.folder === 'ai office overview');
+    assert.equal(me.state, 'needs');
+    assert.equal(office.markDone('q1'), true);
+    const s = office.snapshot();
+    me = s.people.find((p) => p.folder === 'ai office overview');
+    assert.equal(me.state, 'idle');
+    assert.equal(me.words, 'Answered');
+    assert.deepEqual(s.waiting, []);
+    assert.equal(s.projects[0].needs, 0);
+    // Asking again brings it all back.
+    lines('q1').prompt(0, 'go').tool(1, 'Write', { file_path: OFFICE_FILE }).reply(2, 'Shall I push it now?').prompt(4, 'not yet').reply(5, 'Shall I push it tomorrow?').write(file(h, 'q1'));
+    office.scan();
+    me = office.snapshot().people.find((p) => p.folder === 'ai office overview');
+    assert.equal(me.state, 'needs');
+  } finally {
+    h.done();
+  }
+});

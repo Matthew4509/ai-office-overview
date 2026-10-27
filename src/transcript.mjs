@@ -232,7 +232,8 @@ export function addLine(t, l) {
   }
   // An assistant line: one block of a reply (thinking, text or a tool call). Lines of one reply share message.id.
   const id = m.id || l.uuid;
-  const out = Number(m.usage?.output_tokens) || 0;
+  // A count from the file, kept within reason: a damaged or made-up line cannot make the purse negative or infinite.
+  const out = Math.min(Math.max(0, Math.floor(Number(m.usage?.output_tokens)) || 0), 1e8);
   const day = localDay(at);
   if (t.msg && t.msg.id === id) {
     // The same reply again: its usage is the reply's running total, so swap the old count for the new one.
