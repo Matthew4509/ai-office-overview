@@ -78,7 +78,8 @@ begin
   if CurUninstallStep = usPostUninstall then begin
     Data := ExpandConstant('{app}\data');
     if DirExists(Data) then begin
-      if MsgBox('Also delete the office''s data folder?' + #13#10 + Data + #13#10#13#10 + 'It holds the names and looks you gave the staff, the rewards you bought and the token ledger. Choose No to keep it for a later install.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+      // SuppressibleMsgBox: a silent uninstall (/SUPPRESSMSGBOXES) takes No and keeps the data, instead of waiting.
+      if SuppressibleMsgBox('Also delete the office''s data folder?' + #13#10 + Data + #13#10#13#10 + 'It holds the names and looks you gave the staff, the rewards you bought and the token ledger. Choose No to keep it for a later install.', mbConfirmation, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES then
         DelTree(Data, True, True, True);
     end;
     if DirExists(ExpandConstant('{app}')) then RemoveDir(ExpandConstant('{app}'));

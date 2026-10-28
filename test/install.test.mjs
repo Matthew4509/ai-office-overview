@@ -101,6 +101,18 @@ test('removeHooks: a settings file that is not JSON is left alone, with a plain 
   } finally { s.done(); }
 });
 
+test('removeHooks: a settings file saved with a byte-order mark (Notepad, PowerShell 5) is read, and only our hook goes', () => {
+  const s = scratch();
+  try {
+    const ours = { hooks: [{ type: 'command', command: 'node "C:/x/office/hook.mjs" 8860 --ai-office-overview-hook', timeout: 3 }] };
+    fs.writeFileSync(s.settings, '\uFEFF' + JSON.stringify({ hooks: { Stop: [BEEPS.hooks.Stop[0], ours] } }, null, 2));
+    const r = install.removeHooks();
+    assert.equal(r.error, undefined, 'no "not valid JSON"');
+    const left = JSON.parse(fs.readFileSync(s.settings, 'utf8').replace(/^\uFEFF/, ''));
+    assert.deepEqual(left.hooks.Stop, [BEEPS.hooks.Stop[0]]);
+  } finally { s.done(); }
+});
+
 test('tools/setup.mjs install: "n" to both leaves them out, the Start menu one is still made; --yes makes all three; uninstall takes them away (Windows)', { skip: !onWindows && 'shortcuts are made on Windows only' }, () => {
   const s = scratch();
   try {

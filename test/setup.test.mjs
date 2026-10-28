@@ -121,6 +121,24 @@ test('a settings file that is not valid JSON is never touched', () => {
   }
 });
 
+test('a settings file saved with a byte-order mark (Notepad, PowerShell 5) is read: advanced setup goes on and keeps the hooks there', () => {
+  const h = tempHome();
+  try {
+    const file = withSettings(h, '\uFEFF' + JSON.stringify(BEEPS, null, 2));
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    assert.equal(status(office).readable, true);
+    const r = apply(office, { advanced: true }, { port: 8860, hookScript: 'C:\\x\\office\\hook.mjs' });
+    assert.equal(r.error, undefined);
+    const after = JSON.parse(fs.readFileSync(file, 'utf8').replace(/^\uFEFF/, ''));
+    assert.equal(after.model, 'opus');
+    assert.ok(after.hooks.Stop.some((g) => g.hooks[0].command.includes('beep')), 'the beep is kept');
+    assert.ok(after.hooks.Stop.some((g) => g.hooks[0].command.includes('--ai-office-overview-hook')), 'ours is added');
+  } finally {
+    delete process.env.AI_OFFICE_SETTINGS;
+    h.done();
+  }
+});
+
 test('no settings file yet: advanced setup makes one with only its hooks', () => {
   const merged = withOurs({}, hookCommand('C:/a/hook.mjs', 8860));
   assert.deepEqual(Object.keys(merged.hooks).sort(), ['Notification', 'Stop', 'UserPromptSubmit']);

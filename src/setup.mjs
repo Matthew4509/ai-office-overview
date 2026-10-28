@@ -23,7 +23,8 @@ function readSettings(file) {
     if (e.code === 'ENOENT') return { data: {}, text: '' };
     throw e;
   }
-  try { return { data: JSON.parse(text || '{}'), text }; } catch {
+  // A file saved by Notepad can start with a byte-order mark: Claude Code accepts it, so the office does too.
+  try { return { data: JSON.parse(text.replace(/^﻿/, '') || '{}'), text }; } catch {
     return { error: { fault: 'Claude\'s settings file could not be read.', reason: `${file} is not valid JSON, so the office will not touch it.`, wayOut: 'Fix the file (or let Claude fix it), then try again.' } };
   }
 }

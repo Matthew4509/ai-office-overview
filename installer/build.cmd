@@ -8,7 +8,9 @@ rem Run it from anywhere: installer\build.cmd. The stage folder is remade each t
 setlocal
 cd /d "%~dp0"
 title AI Office Overview installer build
-set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
+rem Inno Setup installed for this user only (winget --scope user) lives under %LOCALAPPDATA%\Programs.
+set "ISCC=%LOCALAPPDATA%\Programs\Inno Setup 6\ISCC.exe"
+if not exist "%ISCC%" set "ISCC=%ProgramFiles(x86)%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" set "ISCC=%ProgramFiles%\Inno Setup 6\ISCC.exe"
 if not exist "%ISCC%" (
   echo  Inno Setup 6 was not found. Install it first:  winget install --id JRSoftware.InnoSetup -e

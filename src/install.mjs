@@ -55,7 +55,7 @@ export function removeHooks() {
   }
   if (!/--(ai-office-overview|claude-office)-hook\b/.test(text)) return { where, none: true };
   let data;
-  try { data = JSON.parse(text); } catch { return { where, error: `${file} is not valid JSON, so it was not changed: remove the lines holding --ai-office-overview-hook yourself` }; }
+  try { data = JSON.parse(text.replace(/^﻿/, '')); } catch { return { where, error: `${file} is not valid JSON, so it was not changed: remove the lines holding --ai-office-overview-hook yourself` }; }
   try {
     const backup = `${file}.before-ai-office-overview-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     fs.writeFileSync(backup, text);
