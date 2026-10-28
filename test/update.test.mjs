@@ -9,6 +9,13 @@ import { execFileSync } from 'node:child_process';
 import * as update from '../src/update.mjs';
 
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-office-update-'));
+// Git here (the test's own and src/update.mjs's, which passes process.env on) reads none of this PC's own settings: no
+// global file (an empty one in temp instead) and no system file, so a user's aliases, hooks, signing or credential
+// helpers cannot change what the tests see or run.
+const emptyConfig = path.join(tmp, 'empty.gitconfig');
+fs.writeFileSync(emptyConfig, '');
+process.env.GIT_CONFIG_GLOBAL = emptyConfig;
+process.env.GIT_CONFIG_NOSYSTEM = '1';
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'init.defaultBranch=main', ...a], { stdio: 'pipe' }).toString().trim();
 const save = (d, file, text) => { fs.writeFileSync(path.join(d, file), text); git(d, 'add', file); git(d, 'commit', '-q', '-m', `save ${file}`); };
 const pkg = (v) => `${JSON.stringify({ name: 'ai-office-overview', version: v })}\n`;

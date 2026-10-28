@@ -44,6 +44,14 @@ three shortcuts go, and advanced setup's hooks come out of Claude's settings (a 
 folder and its `data` stay: the user deletes the folder themselves. A copy put on the PC by the installer is removed
 under Settings › Apps instead, which runs the same step first and asks before deleting `data`.
 
+## A copy put here by the installer (.exe)
+- It is in `%LOCALAPPDATA%\Programs\AI Office Overview` and brings its own Node.js in `node\node.exe`. The PC may have
+  no other: run every command there with that one, for example `node\node.exe server.mjs --status`.
+- Advanced setup's hooks run that Node.js by its full path. If Setup says the hooks no longer point here (after a
+  version installed over an older one that wrote plain `node`), the user presses Turn on advanced setup again.
+- It has no git folder, so Setup › Update cannot update it: the user downloads the newer installer from the Releases
+  page and runs it over the old one. The data folder is kept.
+
 ## Review it (what it does on this PC)
 - **Listens** on 127.0.0.1 only (port 8860). Every API request needs the per-run key the page was served with; the one
   exception, `/api/hook`, takes only a JSON event. Code: `server.mjs`.

@@ -11,8 +11,12 @@
   const H = 360;
   const COLOURS = ['#69bfe9', '#efbd72', '#b29be4', '#78c6a3', '#ef8a91', '#74a7d0', '#f2a65a'];
 
-  const bestOf = (id) => { try { return Number(localStorage.getItem(`ai-office-arcade-${id}`)) || 0; } catch { return 0; } };
-  const keepBest = (id, n) => { try { if (n > bestOf(id)) localStorage.setItem(`ai-office-arcade-${id}`, String(n)); } catch { /* kept for this visit only */ } };
+  // A best score is a whole number from 0 to 99,999,999: anything else read back (an edited or damaged entry) or about
+  // to be kept is brought into that range, so the menu and the screens never show a huge, negative or broken number.
+  const BEST_MAX = 99999999;
+  const sane = (n) => { const v = Math.floor(Number(n)); return Number.isFinite(v) ? Math.min(BEST_MAX, Math.max(0, v)) : 0; };
+  const bestOf = (id) => { try { return sane(localStorage.getItem(`ai-office-arcade-${id}`)); } catch { return 0; } };
+  const keepBest = (id, n) => { try { const v = sane(n); if (v > bestOf(id)) localStorage.setItem(`ai-office-arcade-${id}`, String(v)); } catch { /* kept for this visit only */ } };
 
   function text(c, s, x, y, size, col = '#e8ecf2', align = 'left', weight = 700) {
     c.font = `${weight} ${size}px Segoe UI, system-ui, sans-serif`;

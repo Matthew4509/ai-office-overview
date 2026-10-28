@@ -4,14 +4,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { Office } from '../src/office.mjs';
 import { settings, status, theme } from '../src/setup.mjs';
-import { tempHome } from './helpers.mjs';
+import { tempHome, startOffice } from './helpers.mjs';
 
-const sun = (() => { const m = { exports: {} }; new Function('module', fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'sun.js'), 'utf8'))(m); return m.exports; })();
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const sun = (() => { const m = { exports: {} }; new Function('module', fs.readFileSync(path.join(HERE, '..', 'public', 'sun.js'), 'utf8'))(m); return m.exports; })();
 // Minutes past midnight UTC of a time in ms.
 const utcMin = (ms) => { const d = new Date(ms); return d.getUTCHours() * 60 + d.getUTCMinutes(); };
 const near = (got, want, slack, what) => assert.ok(Math.abs(got - want) <= slack, `${what}: ${got} minutes, expected about ${want}`);
@@ -81,33 +81,15 @@ test('the theme is kept in the office settings: auto, dark, light or system, and
   }
 });
 
-function freePort() {
-  return new Promise((resolve, reject) => {
-    const s = net.createServer();
-    s.on('error', reject);
-    s.listen(0, '127.0.0.1', () => { const { port } = s.address(); s.close(() => resolve(port)); });
-  });
-}
-
 test('the page comes in its theme on <html>: light until one is chosen, then the one chosen (Auto as light or dark)', async () => {
   const h = tempHome();
-  const port = await freePort();
   const file = path.join(h.dir, 'settings.json');
   fs.writeFileSync(file, '{}\n');
   // A scratch office: its own port, data, transcripts and AI-app settings, never the real ones.
-  const child = spawn(process.execPath, [path.join(import.meta.dirname, '..', 'server.mjs')], {
-    env: { ...process.env, PORT: String(port), AI_OFFICE_DATA: h.data, AI_OFFICE_TRANSCRIPTS: h.transcripts, AI_OFFICE_SETTINGS: file, AI_OFFICE_OPEN: '0' },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  let o = null;
   try {
-    let out = '';
-    await new Promise((resolve, reject) => {
-      const t = setTimeout(() => reject(new Error(`the office did not open: ${out}`)), 10000);
-      child.stdout.on('data', (c) => { out += c; if (out.includes('All transcripts read')) { clearTimeout(t); resolve(); } });
-      child.stderr.on('data', (c) => { out += c; });
-      child.on('exit', (code) => { clearTimeout(t); reject(new Error(`the office ended (${code}): ${out}`)); });
-    });
-    const base = `http://127.0.0.1:${port}`;
+    o = await startOffice(h, { AI_OFFICE_SETTINGS: file });
+    const base = `http://127.0.0.1:${o.port}`;
     const tag = async (at = '/') => (await (await fetch(base + at)).text()).match(/<html lang="en" data-theme-choice="(\w+)" data-theme="(\w+)">/)?.slice(1);
     const key = /<meta name="ai-office-key" content="([^"]+)">/.exec(await (await fetch(base)).text())[1];
     const choose = (t) => fetch(`${base}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json', 'x-ai-office-key': key }, body: JSON.stringify({ theme: t }) });
@@ -123,8 +105,7 @@ test('the page comes in its theme on <html>: light until one is chosen, then the
     assert.equal(shown, sun.resolve('auto'));
     assert.ok((await (await fetch(`${base}/sun.js`)).text()).includes('officeSun'), 'sun.js is served for the page');
   } finally {
-    child.removeAllListeners('exit');
-    await new Promise((resolve) => { child.on('exit', resolve); child.kill(); });
+    if (o) await o.stop();
     h.done();
   }
 });

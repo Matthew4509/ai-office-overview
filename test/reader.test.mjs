@@ -51,6 +51,9 @@ test('a reply asks when a last line ends with a question mark; the first such li
   assert.equal(questionIn('Built it.\n\n**Your call:**\n1. Prices x 20?\n2. Seat names?\n\nThe notes are ready.'), '1. Prices x 20?');
   assert.equal(questionIn('Done. Let me know what you find.'), '');
   assert.equal(questionIn('Is this right? It was built and tested.'), '');
+  assert.equal(questionIn('Ready.\n\nShall I <b>deploy</b> it now?'), 'Shall I <b>deploy</b> it now?', 'a > in the words stays');
+  assert.equal(questionIn('Should `my_project` keep its __init__ file?'), 'Should my_project keep its __init__ file?', 'underscores in names stay');
+  assert.equal(questionIn('> ## **Ship it?**'), 'Ship it?', 'quote, heading and bold marks come off');
 });
 
 test('steps get plain words', () => {

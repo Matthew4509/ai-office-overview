@@ -97,7 +97,8 @@ function tick() {
   try {
     office.scan();
     office.snapshot(); // keeps the ledger up to date even when no page is open
-    office.save();
+    office.save({ atMost: 30_000 }); // shutdown() saves the rest
+
     lastScanError = '';
   } catch (e) {
     lastScanError = String(e?.message || e);

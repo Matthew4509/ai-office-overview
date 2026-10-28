@@ -51,7 +51,8 @@
   const tone = (col) => (night && NIGHT[col]) || col;
   /** Words written straight on the floor: dark by day, light by night. */
   const floorInk = () => (night ? '#e8ecf2' : INK);
-  const floorSoft = () => (night ? '#a5afbe' : '#7b8794');
+  // Soft, but still 4.5:1 or more on every room's floor (the day colour was about 3:1).
+  const floorSoft = () => (night ? '#a5afbe' : '#5a6577');
   const ROOMS = [
     { name: 'Computer room', x: 20, y: 20, w: 540, h: 340, fill: '#e8eff2' },
     { name: 'Meeting room', x: 640, y: 20, w: 540, h: 340, fill: '#e9e7f1', lock: 'boardroom' },
@@ -773,7 +774,7 @@
   /** The office's list every few seconds: everyone in (not gone home), in the project picked if one is. */
   function update(data, list) {
     const now = performance.now();
-    const filter = app()?.filterKey?.() ?? app()?.project ?? null;
+    const filter = app()?.project ?? null;
     // Shown again after a long time away, or another project picked: everyone is put where they are, not walked there.
     const snap = world.first || now - world.seenAt > 4000 || filter !== world.filter;
     world.filter = filter;
@@ -2062,6 +2063,10 @@
   /** The strip's width beside the office, and the room kept for it (three thoughts) when it sits under the office. */
   const STRIP_W = 240;
   const STRIP_UNDER = 200;
+  /** A column narrower than this has the strip under the office (beside it, the office would be a thumbnail); and the
+   * least of the strip kept in sight under it then (its first lines: the column scrolls for the rest). */
+  const STACK_BELOW_W = 640;
+  const STRIP_PEEK = 60;
   const NARROW = window.matchMedia('(max-width: 700px)');
 
   function fit(view) {
@@ -2099,9 +2104,12 @@
       const keep = Math.max(STRIP_UNDER, strip);
       const besideW = Math.min(box.clientWidth - STRIP_W - gap, (room * W) / H);
       const underW = Math.min(box.clientWidth, ((room - keep) * W) / H);
-      const stack = underW > besideW * 1.15;
+      // A narrow column (a 901-1200 px window with the right panel beside it): always under, and the office as big as
+      // the column lets it be; the strip has what is left under it, at least its first lines.
+      const narrow = box.clientWidth < STACK_BELOW_W;
+      const stack = narrow || underW > besideW * 1.15;
       box.classList.toggle('office-stacked', stack);
-      if (stack) room -= keep;
+      if (stack) room -= narrow ? Math.min(keep, Math.max(STRIP_PEEK, room - (box.clientWidth * H) / W)) : keep;
     } else box.classList.remove('office-stacked');
     // The strip beside the office (a wide window) takes its own width and the gap out of the row.
     const css = getComputedStyle(box);
@@ -2217,6 +2225,12 @@
       return;
     }
     const dt = last ? Math.min(0.1, (now - last) / 1000) : 0;
+    // On screen again: the office's own clock stood still meanwhile, but an energy drink lasts a real minute (the
+    // vending machine says so, and refuses more until it is over), so the time away is taken off what is left of it.
+    if (!last && world.seenAt) {
+      const away = (now - world.seenAt) / 1000;
+      if (away > 1) for (const p of world.people.values()) if (p.hyperUntil) p.hyperUntil = Math.max(world.time, p.hyperUntil - away);
+    }
     last = now;
     world.seenAt = now;
     step(dt);
@@ -2245,7 +2259,7 @@
       return;
     }
     // Nobody picked: the latest thoughts (drawn again when one is added, and each minute for the "ago").
-    const key = p ? `${p.id}|${wordsOf(p)}|${holding(p)}|${p.row.name}` : `all|${world.people.size}|${world.thoughts.at(-1)?.at}|${Math.floor(Date.now() / 60000)}|${app()?.filterKey?.()}|${chatMode()}`;
+    const key = p ? `${p.id}|${wordsOf(p)}|${holding(p)}|${p.row.name}` : `all|${world.people.size}|${world.thoughts.at(-1)?.at}|${Math.floor(Date.now() / 60000)}|${app()?.project}|${chatMode()}`;
     if (key === v.told) return;
     v.told = key;
     if (p) {
@@ -2328,8 +2342,9 @@
   function showTrophy(view) {
     const t = world.rooms.trophy;
     if (!t) return;
-    const day = new Date(t.at).toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
-    view.lockNote = { key: `trophy:${t.at}`, until: clock() + 20, parts: [el('b', { text: '🏆 World\'s Best Boss' }), el('br'), el('span', { text: `Earned ${day}.` }), el('br'),
+    const d = new Date(t.at);
+    const day = Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString([], { day: 'numeric', month: 'long', year: 'numeric' });
+    view.lockNote = { key: `trophy:${t.at}`, until: clock() + 20, parts: [el('b', { text: '🏆 World\'s Best Boss' }), el('br'), el('span', { text: day ? `Earned ${day}.` : 'Earned.' }), el('br'),
       el('span', { class: 'note', text: 'Every room unlocked, every piece bought, and the team looked after.' })] };
     view.told = '';
     world.selected = null;
@@ -2572,7 +2587,8 @@
     const head = el('p', { class: 'row' }, purseLine);
     // The last few things bought (the office keeps the record), newest first, folded under one Transaction history line
     // (open, it stays open as the shop is drawn again).
-    const when = (iso) => new Date(iso).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    // A date that cannot be read (a damaged record) shows nothing, never "Invalid Date".
+    const when = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }); };
     const wasOpen = !!shopBox?.querySelector('details.recent[open]');
     const recent = world.recent.length ? el('details', { class: 'recent', open: wasOpen },
       el('summary', {}, el('b', { text: 'Transaction history' }), el('span', { class: 'note', text: ` · ${world.recent.length} recent` })),
@@ -2707,7 +2723,8 @@
         // The delay is set on the element, not as a style attribute: the page's rules refuse inline styles.
         tray.replaceChildren(...present().slice(0, 6).map((_, i) => { const can = el('span', { class: `vend-can c${i % 4} out` }); can.style.animationDelay = `${i * 0.12}s`; return can; }));
         shopSaid.textContent = `Energy drinks bought (${big(energy.price)} tokens): everyone buzzes for a minute.`;
-        setTimeout(() => { app()?.closeWindow?.(); drinkUp(); }, 1300);
+        // Closed only if it is still this machine's window: one opened since (or Escape) is left alone.
+        setTimeout(() => { if (coin.isConnected) app()?.closeWindow?.(); drinkUp(); }, 1300);
       } catch (e) {
         show('COIN RETURNED', app()?.faultText?.(e) || 'The office did not answer. Check that the AI Office Overview window is still open, then try again.');
         coin.disabled = false;

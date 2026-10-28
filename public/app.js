@@ -62,7 +62,8 @@
     if (s < 3600) return `${Math.round(s / 60)} min`;
     return `${(s / 3600).toFixed(1)} h`;
   }
-  const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  // A time that cannot be read (a damaged record) shows nothing, never "Invalid Date".
+  const clock = (iso) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? '' : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); };
   const projectName = (folder) => folder || 'Consultants';
   const where = (p) => `${p.folder || 'Projects folder'}, seat ${p.seat}`;
 
@@ -82,15 +83,31 @@
   }
   app.face = face;
 
+  // The fault line at the foot. The same fault again (every 3 seconds while it lasts) changes nothing, so it is read out
+  // once; closed, it stays closed until the fault is over or another one comes.
+  let faultSaid = '';
+  let faultClosed = '';
+  let beforeFault = null;
   function showFault(e) {
     const box = document.getElementById('fault');
-    if (!e) { box.hidden = true; return; }
+    if (!e) { faultSaid = faultClosed = ''; box.hidden = true; return; }
     const f = e.error || {};
-    box.textContent = f.fault ? `${f.fault} ${f.reason || ''} ${f.wayOut || ''}`.trim()
+    const words = f.fault ? `${f.fault} ${f.reason || ''} ${f.wayOut || ''}`.trim()
       : 'The office is not answering. It may still be starting (its first read of your transcripts can take a minute), or its window was closed. Keep the AI Office Overview window open, or start it again with Start AI Office Overview.cmd: this page catches up by itself.';
+    if (words === faultClosed) return;
+    if (words !== faultSaid || box.hidden) {
+      faultSaid = words;
+      document.getElementById('fault-words').textContent = words;
+    }
     box.hidden = false;
   }
   app.showFault = showFault;
+  document.addEventListener('focusin', (e) => { if (!e.target.closest?.('#fault')) beforeFault = e.target; });
+  document.getElementById('fault-close').addEventListener('click', () => {
+    faultClosed = faultSaid;
+    document.getElementById('fault').hidden = true;
+    if (beforeFault?.isConnected) beforeFault.focus();
+  });
   /** A fault in one line with its way out (what went wrong, why, what to do), for a window's status line. Every window
    * says it this way, so no error is left without a next step. */
   app.faultText = (e) => {
@@ -104,7 +121,8 @@
   const KEY = document.querySelector('meta[name="ai-office-key"]')?.content || '';
   async function api(url, body) {
     const headers = { 'x-ai-office-key': KEY };
-    const r = await fetch(url, body === undefined ? { cache: 'no-store', headers } : { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    // A read gives up after 20 seconds: one that never ends would hold up every ask after it (one at a time).
+    const r = await fetch(url, body === undefined ? { cache: 'no-store', headers, signal: AbortSignal.timeout?.(20000) } : { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
     // A key from an earlier run: the office was started again, so this page is reloaded to get the new one.
     if (r.status === 403) { setTimeout(() => location.reload(), 500); throw { error: { fault: 'The office was restarted.', reason: 'This page is from its earlier run.', wayOut: 'It reloads by itself.' } }; }
     const d = await r.json().catch(() => ({}));
@@ -237,6 +255,9 @@
       if (b.textContent !== label) b.textContent = label;
     }
     if (showCard) return;
+    // No card open: the next one opened is read out again, even the same person's.
+    const nowSaid = document.getElementById('card-said');
+    if (nowSaid?.textContent) nowSaid.textContent = '';
     if (app.sideTab === 'needs') drawWaiting();
     // Staff rewards is drawn when it is opened (and after a purchase); while open only its purse line changes.
     else if (wasHidden || !rewardsPane.childElementCount) window.officeView?.rewards?.(rewardsPane);
@@ -270,7 +291,12 @@
       type: 'checkbox',
       checked: !!p.favHidden,
       onchange: async (e) => {
-        try { await api('/api/favourite', { folder: p.folder, seat: p.seat, hidden: e.target.checked }); showFault(null); await refresh(); } catch (err) { showFault(err); }
+        const box = e.target;
+        try { await api('/api/favourite', { folder: p.folder, seat: p.seat, hidden: box.checked }); showFault(null); await refresh(); } catch (err) {
+          // Not kept: the box goes back to how it was, so it never shows a choice the office does not have.
+          box.checked = !box.checked;
+          showFault(err);
+        }
       },
     }), 'Hide');
     const tile = (p) => {
@@ -327,19 +353,24 @@
       // Looked up at click time: a kept button (same question, a second thread in the seat) would post the old id.
       onclick: async () => {
         const w = (app.data?.waiting || []).find((x) => x.person === p.key);
-        try { if (w) await api('/api/done', { id: w.id }); showFault(null); await refresh(); } catch (e) { showFault(e); }
+        try { if (w) await api('/api/done', { id: w.id }); cardFault(null); await refresh(); } catch (e) { cardFault(e); }
       },
     }, 'Answered: take off the list'), el('span', { class: 'note', text: 'It comes back if they ask again.' })) : null;
     const steps = t && t.steps?.length ? el('ol', { class: 'steps', reversed: true }, [...t.steps].reverse().map((s) => el('li', {}, el('time', { datetime: s.at, text: clock(s.at) }), s.words))) : null;
     // Two parts, each redrawn only when it changes: the top (name and buttons) stays put while the live part ticks.
+    // Between them, a line for a button on the card that did not work (kept while the card is open).
     let head = side.querySelector(':scope > .card-head');
     let live = side.querySelector(':scope > .card-live');
     if (!head || !live || side.dataset.card !== p.key) {
       head = el('div', { class: 'card card-head' });
       live = el('div', { class: 'card card-live' });
-      side.replaceChildren(head, live);
+      side.replaceChildren(head, el('p', { class: 'card-said' }), live);
       side.dataset.card = p.key;
     }
+    // Read out only when what they are doing changes (or another card opens), not each time the card ticks.
+    const doing = `${p.name}: ${STATES[p.state]?.word || ''}${p.state !== 'home' && p.words && p.words !== STATES[p.state]?.word ? `, ${p.words}` : ''}`;
+    const nowSaid = document.getElementById('card-said');
+    if (nowSaid && nowSaid.textContent !== doing) nowSaid.textContent = doing;
     swap(head, back,
       el('div', { class: 'card-title' }, face(p, 48), el('div', { class: 'card-name' }, el('h2', { class: 'name-heading' }, p.name, personStar(p)), el('p', { class: 'sub', text: where(p) + (p.nick ? ` · first called ${defaultName(p)}` : '') })), edit),
       favRow(p), openRow(p), asked, doneBtn);
@@ -352,9 +383,15 @@
     swap(live, dl, earnings, msgsHead, msgs, steps ? el('h3', { text: 'Last steps' }) : null, steps);
   }
 
+  /** A button on the card that did not work: said by the card, and on the fault line at the foot too. Null clears both. */
+  function cardFault(e) {
+    const line = document.querySelector('#side-card > .card-said');
+    if (line) line.textContent = e ? app.faultText(e) : '';
+    showFault(e);
+  }
   const star = (on) => (on ? '★' : '☆');
   const favToggle = (body) => async () => {
-    try { await api('/api/favourite', body()); showFault(null); await refresh(); } catch (e) { showFault(e); }
+    try { await api('/api/favourite', body()); cardFault(null); await refresh(); } catch (e) { cardFault(e); }
   };
   /** The project's star on the card: everyone in the project is a favourite. */
   function favRow(p) {
@@ -397,22 +434,34 @@
     const input = el('input', { type: 'text', maxlength: '40', value: p.nick || '', placeholder: defaultName(p), 'aria-label': 'Name' });
     const editor = L.editor({ look, onChange: (l) => { look = l; madeUp = false; } });
     const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
+    // Saved: the card is drawn again with the new name, so its EDIT button is a new one; the focus goes back to it.
+    const backToCard = () => {
+      const now = document.activeElement;
+      if (!now || now === document.body || !now.isConnected) document.querySelector('#side-card .edit-btn')?.focus();
+    };
     const save = async (e) => {
       e.preventDefault();
       try {
         await api('/api/edit', { folder: p.folder, seat: p.seat, nick: input.value, ...(madeUp ? {} : { look }) });
         close();
         await refresh();
+        backToCard();
       } catch (err) {
         const f = err?.error || {};
         said.textContent = f.fault ? `${f.fault} ${f.reason || ''} ${f.wayOut || ''}` : 'The office did not answer: nothing was saved. Check that AI Office Overview is still running, then try again.';
       }
     };
+    // The made-up look again, and the name as typed in the box (kept too, as Save would).
     const resetLook = p.look ? el('button', {
       type: 'button',
       class: 'btn',
       onclick: async () => {
-        try { await api('/api/edit', { folder: p.folder, seat: p.seat, look: null }); close(); await refresh(); } catch (err) { said.textContent = 'The office did not answer: nothing was changed.'; }
+        try {
+          await api('/api/edit', { folder: p.folder, seat: p.seat, nick: input.value, look: null });
+          close();
+          await refresh();
+          backToCard();
+        } catch (err) { said.textContent = err?.error?.fault ? app.faultText(err) : 'The office did not answer: nothing was changed. Check that AI Office Overview is still running, then try again.'; }
       },
     }, 'Use a made-up look again') : null;
     const form = el('form', { class: 'sheet-box edit-box', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'edit-title', onsubmit: save },
@@ -502,17 +551,57 @@
     document.getElementById('loading-bar').value = l.total ? l.done / l.total : 0;
   }
 
-  async function refresh() {
+  /** Asks the office for everyone once; true when it answered. */
+  async function load() {
     try {
       app.data = await api('/api/state');
       drawLoading(app.data.loading);
       showFault(app.data.scanError ? { error: { fault: 'Some transcripts could not be read.', reason: app.data.scanError, wayOut: 'The office keeps trying every few seconds.' } } : null);
       draw();
+      answered();
+      return true;
     } catch (e) {
       showFault(e);
+      return false;
     }
   }
+  // One request at a time. One asked for while another is on its way (a button pressed just after the 3-second ask went
+  // out) waits for it and then asks again, so what it shows comes after the change; any more share that one.
+  let asking = null;
+  let askAgain = null;
+  function refresh() {
+    if (!asking) {
+      asking = load().finally(() => { asking = null; });
+      return asking;
+    }
+    askAgain ??= asking.then(() => { askAgain = null; return refresh(); });
+    return askAgain;
+  }
   app.refresh = refresh;
+
+  // Every 3 seconds while the office answers. While it does not (stopped, or starting again), the wait doubles up to 30
+  // seconds, and is back to 3 once it answers; coming back to the window asks at once.
+  const POLL_MS = 3000;
+  const POLL_MAX_MS = 30000;
+  let pollMs = POLL_MS;
+  let pollTimer = 0;
+  async function poll() {
+    clearTimeout(pollTimer);
+    pollTimer = 0;
+    const ok = await refresh();
+    pollMs = ok ? POLL_MS : Math.min(POLL_MAX_MS, pollMs * 2);
+    clearTimeout(pollTimer);
+    pollTimer = setTimeout(poll, pollMs);
+  }
+  /** It answered (to a button's ask too): a long wait set while it did not is cut back to 3 seconds. */
+  function answered() {
+    if (pollMs === POLL_MS) return;
+    pollMs = POLL_MS;
+    if (pollTimer) { clearTimeout(pollTimer); pollTimer = setTimeout(poll, POLL_MS); }
+  }
+  const askNowIfWaiting = () => { if (pollMs > POLL_MS && pollTimer && !document.hidden) poll(); };
+  window.addEventListener('focus', askNowIfWaiting);
+  document.addEventListener('visibilitychange', askNowIfWaiting);
 
   function setView(v) {
     app.view = v;
@@ -606,14 +695,13 @@
       if (!open && wasOpen) {
         const was = back;
         back = null;
-        // A tile drawn again meanwhile has a new button in the old one's place, found by what it does and for whom; one
-        // greyed for a moment (Starting…) is waited for, up to two seconds.
-        const sel = was?.dataset?.act ? `[data-act="${CSS.escape(was.dataset.act)}"][data-id="${CSS.escape(was.dataset.id || '')}"]` : '';
+        // One greyed for a moment is waited for, up to two seconds. (A button drawn again meanwhile is put back by what
+        // drew it: EDIT's Save, for one.)
         const giveBack = (tries) => {
           if (document.querySelector('.sheet:not([hidden]) .sheet-box')) return;
-          const to = was?.isConnected ? was : sel ? document.querySelector(sel) : null;
-          if (to?.isConnected && !to.disabled) to.focus();
-          else if (tries > 0 && (to || sel)) setTimeout(() => giveBack(tries - 1), 200);
+          const to = was?.isConnected ? was : null;
+          if (to && !to.disabled) to.focus();
+          else if (tries > 0 && to) setTimeout(() => giveBack(tries - 1), 200);
         };
         giveBack(10);
       }
@@ -630,6 +718,5 @@
     });
   }
 
-  refresh();
-  setInterval(refresh, 3000);
+  poll();
 })();

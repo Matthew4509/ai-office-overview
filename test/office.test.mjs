@@ -395,3 +395,57 @@ test('Answered takes a person off Needs attention and out of "Needs you" until t
     h.done();
   }
 });
+
+test('a transcript written again in place, larger, is read from the start, not from where the old one stopped', () => {
+  const h = tempHome();
+  try {
+    const f = path.join(h.transcripts, 'C--Work-projects', 'rw.jsonl');
+    lines('rw').prompt(0, 'first').reply(1, 'One.', 100).write(f);
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    office.scan();
+    const old = office.files[f].offset;
+    assert.equal(office.files[f].t.out, 100);
+    lines('rw').prompt(0, 'a much longer first question, so that the old stopping place now falls inside a line').reply(1, 'Two.', 5000).write(f);
+    assert.notEqual(fs.readFileSync(f)[old - 1], 10, 'the old stopping place is inside a line now');
+    office.scan();
+    assert.equal(office.files[f].t.out, 5000, 'read again from the start: only the new file counts');
+  } finally {
+    h.done();
+  }
+});
+
+test('a file edited three times whose name is an Object name (constructor) still counts as "again"', () => {
+  const h = tempHome();
+  try {
+    const f = path.join(h.transcripts, 'C--Work-projects', 'ob.jsonl');
+    lines('ob').prompt(0, 'go').tool(1, 'Write', { file_path: 'constructor' }).tool(2, 'Write', { file_path: 'constructor' }).tool(3, 'Write', { file_path: 'constructor' }).write(f);
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    office.scan();
+    const t = office.files[f].t;
+    assert.equal(t.edits.constructor, 3);
+    assert.equal(t.event?.kind, 'again');
+    assert.equal(t.event?.n, 3);
+  } finally {
+    h.done();
+  }
+});
+
+test('save({ atMost }) writes at most once in that time (the ledger and the read positions together); a plain save writes at once', () => {
+  const h = tempHome();
+  try {
+    lines('sv').prompt(0, 'go').reply(1, 'Done.').write(path.join(h.transcripts, 'C--Work-projects', 'sv.jsonl'));
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    office.scan();
+    office.save({ atMost: 30_000 });
+    const cache = path.join(h.data, 'cache.json'), ledger = path.join(h.data, 'ledger.json');
+    assert.ok(fs.existsSync(cache) && fs.existsSync(ledger));
+    fs.unlinkSync(cache); fs.unlinkSync(ledger);
+    office.dirty = true;
+    office.save({ atMost: 30_000 });
+    assert.ok(!fs.existsSync(cache) && !fs.existsSync(ledger), 'too soon: neither written');
+    office.save();
+    assert.ok(fs.existsSync(cache) && fs.existsSync(ledger), 'a plain save (shutdown) writes both');
+  } finally {
+    h.done();
+  }
+});

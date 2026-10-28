@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { emptyThread, readFrom, localDay } from './transcript.mjs';
+import { emptyThread, readFrom, localDay, stillAfterLineEnd } from './transcript.mjs';
 import { folderOf, stateOf, assignSeats, defaultName, projectOf, normPath } from './people.mjs';
 import { cleanLook } from './look.mjs';
 import { AppLinks } from './applinks.mjs';
@@ -137,7 +137,9 @@ export class Office {
     try { st = fs.statSync(file); } catch { return 0; }
     const had = this.files[file];
     if (had && had.size === st.size && had.mtime === st.mtimeMs) return 0;
-    const rec = had && st.size >= had.size ? had : { offset: 0, t: emptyThread(id, this.settings.openedAt) };
+    // Smaller, or written again in place (the place we stopped is no longer after a line end): read it from the start.
+    const keep = had && st.size >= had.size && stillAfterLineEnd(file, had.offset);
+    const rec = keep ? had : { offset: 0, t: emptyThread(id, this.settings.openedAt) };
     rec.parent = parent;
     rec.offset = readFrom(file, rec.t, rec.offset);
     rec.size = st.size;
@@ -295,9 +297,12 @@ export class Office {
     return true;
   }
 
-  /** Saves the ledger and the read positions, if anything changed. */
-  save() {
+  /** Saves the ledger and the read positions, if anything changed. With { atMost } (ms), not more often than that: the
+   * 3-second tick saves at most every 30 seconds while threads are busy (both files always together, so they agree). */
+  save({ atMost = 0 } = {}) {
     if (!this.dirty) return;
+    if (atMost && Date.now() - (this.savedAt || 0) < atMost) return;
+    this.savedAt = Date.now();
     writeJson(this.file('ledger.json'), this.ledger);
     writeJson(this.file('cache.json'), { version: CACHE_VERSION, since: this.settings.openedAt, files: this.files });
     this.dirty = false;

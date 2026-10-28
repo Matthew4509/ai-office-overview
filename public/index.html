@@ -44,13 +44,14 @@
     </div>
     <div id="side-needs" role="tabpanel" aria-labelledby="tab-needs"></div>
     <div id="side-rewards" role="tabpanel" aria-labelledby="tab-rewards" hidden></div>
-    <div id="side-card" aria-live="polite" hidden></div>
+    <div id="side-card" hidden></div>
   </aside>
 </div>
 <div id="setup" class="sheet" hidden></div>
 <div id="edit" class="sheet" hidden></div>
 <div id="check" class="sheet" hidden></div>
-<p id="fault" class="fault" role="alert" hidden></p>
+<p id="card-said" class="sr-only" aria-live="polite"></p>
+<div id="fault" class="fault" hidden><p id="fault-words" role="alert"></p><button type="button" id="fault-close" class="btn" aria-label="Close this message" title="Close this message">Close</button></div>
 <script src="sun.js"></script>
 <script src="look.js"></script>
 <script src="banter.js"></script>

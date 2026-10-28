@@ -25,13 +25,15 @@ Three ways, each for your Windows user only (no administrator needed):
   Node.js, puts the office in the Start menu, offers a desktop shortcut and Start with Windows, and starts the office.
   Windows SmartScreen says "unknown publisher" the first time (More info, then Run anyway): the installer is not
   code-signed. The office then appears under Settings › Apps, where Uninstall stops it, takes its hooks out of Claude's
-  settings, removes the shortcuts and the program, and asks before deleting the data folder. An installed copy gets a
-  new version from the Releases page (Setup › Update says so), not with git.
+  settings, removes the shortcuts and the program, and asks before deleting the data folder. **It does not update
+  itself**: for a newer version, download the newer installer and run it over the old one (your data folder is kept).
+  Setup › Update says so.
 - **install.cmd** in a copy of this folder (`git clone https://github.com/Matthew4509/ai-office-overview.git`, or a
   zip): it checks Node.js 20 or newer (and offers to install it with winget), puts the office in the Start menu, asks
   about a desktop shortcut and Start with Windows, and starts the office. Setup › Setup in the office does the
   shortcuts too. **uninstall.cmd** undoes it (so does Setup › About › Uninstall): the office stops, the shortcuts go and
-  the hooks come out; the folder stays for you to delete.
+  the hooks come out; the folder stays for you to delete. A copy made with `git clone` updates itself from Setup ›
+  Update; a zip does not (download the newer zip and copy your data folder across).
 - **Nothing at all**: with Node.js 20 or newer, double-click **Start AI Office Overview.cmd**, or run `node server.mjs`.
 
 It is made for Windows. On macOS or Linux `node server.mjs` runs the office and its page, with no shortcuts, installer
@@ -150,7 +152,8 @@ being taken.
 - **Advanced** (Setup › Setup › Turn on advanced setup): adds three hooks to Claude Code's settings file
   (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
   straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
-  takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing.
+  takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing. In a
+  copy put here by the installer, the hooks run its own Node.js (`node\node.exe`), so the PC needs no other.
   It is refused when the office's folder path holds a `$`, a backtick, a `"` or a `%`, which the hook runner would read
   as part of a command: move the office to a plainer folder first.
 
@@ -160,7 +163,8 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 
 ## Files
 
-- `server.mjs`: the small server (127.0.0.1:8860 only). Every request from the page carries a key made when the office
+- `server.mjs`: the small server (127.0.0.1:8860 only; the page also opens as http://localhost:8860/, which is the same
+  PC). Every request from the page carries a key made when the office
   starts (a page from an earlier run reloads itself); the hook route takes a plain JSON event instead.
 - `src/transcript.mjs` reads one transcript; `src/people.mjs` has the folder, seat and state rules; `src/office.mjs`
   keeps the ledger and makes the snapshot; `src/shop.mjs` is the shop; `src/setup.mjs` does easy and advanced setup;
@@ -178,7 +182,8 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 - `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
   read to.
-- `test/`: `npm test`.
+- `test/`: `npm test` (Node.js 20 or newer; `tools/run-tests.mjs` lists the test files, and
+  `node tools/run-tests.mjs test/shop.test.mjs` runs only those named).
 - `tools/head-office-check.mjs`: compares this app with AI Head Office Overview's office, which is the main copy.
   `tools/head-office-differences.json` lists every difference left, each marked as on purpose, to bring here, or ahead
   here. Run `node tools/head-office-check.mjs [path to Head Office's office folder]`: it says "Everything left is on the

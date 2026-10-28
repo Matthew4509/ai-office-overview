@@ -4,6 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { readText, writeJson } from './files.mjs';
 
 export const SHOP = [
   { id: 'coffee', name: 'Coffee round', the: 'the coffee round', price: 200_000, keeps: false, most: 0, room: 'treats' },
@@ -53,14 +54,22 @@ export function locksOf(bought) {
 
 function fileOf(office) { return path.join(office.dataDir, 'office.json'); }
 
-/** Purchases as kept, oldest first; unknown items dropped. */
-export function boughtOf(office) {
+/** Purchases as kept, oldest first; unknown items dropped. With { strict }, a file another program holds (an antivirus,
+ * EBUSY) throws instead of reading as nothing, so a purchase can never write over what was bought before. */
+export function boughtOf(office, { strict = false } = {}) {
   let raw = {};
-  try { raw = JSON.parse(fs.readFileSync(fileOf(office), 'utf8')); } catch (e) {
-    raw = {};
-    // There but unreadable: copied aside first, so the next purchase cannot wipe what was bought before.
-    if (e.code !== 'ENOENT') try { fs.copyFileSync(fileOf(office), fileOf(office).replace(/\.json$/, '') + '.damaged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'); } catch {}
+  let text = null;
+  try { text = readText(fileOf(office)); } catch (e) {
+    if (e.code !== 'ENOENT' && strict) throw e;
   }
+  if (text !== null) {
+    try { raw = JSON.parse(text.replace(/^\uFEFF/, '')); } catch {
+      raw = {};
+      // There but not JSON: copied aside first, so the next purchase cannot wipe what was bought before.
+      try { fs.copyFileSync(fileOf(office), fileOf(office).replace(/\.json$/, '') + '.damaged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'); } catch {}
+    }
+  }
+  if (!raw || typeof raw !== 'object') raw = {};
   const list = Array.isArray(raw.bought) ? raw.bought : [];
   return list.filter((b) => b && SHOP.some((i) => i.id === b.item)).map((b) => ({ item: b.item, price: Math.max(0, Math.round(Number(b.price) || 0)), at: String(b.at || '').slice(0, 40) }));
 }
@@ -131,7 +140,10 @@ export function buy(office, item, now = new Date()) {
   const i = SHOP.find((x) => x.id === item);
   const no = (fault, reason, wayOut) => ({ error: { fault, reason, wayOut } });
   if (!i) return no('That is not in the shop.', 'The office does not sell it.', 'Pick something from the shop.');
-  const bought = boughtOf(office);
+  let bought;
+  try { bought = boughtOf(office, { strict: true }); } catch (e) {
+    return no('The office could not read what was bought before.', `Another program is holding data${path.sep}office.json (${e.code || 'busy'}), so nothing was bought or spent.`, 'Try again in a moment.');
+  }
   const have = countOf(bought, i.id);
   const locked = locksOf(bought);
   if (i.unlocks && !locked[i.unlocks]) return no(`${PLACE[i.unlocks][0].toUpperCase()}${PLACE[i.unlocks].slice(1)} is unlocked already.`, 'Its key is kept for good.', 'Furnish it from the list below.');
@@ -150,9 +162,6 @@ export function buy(office, item, now = new Date()) {
   const left = purseOf(earned, bought).left;
   if (left < i.price) return no(`Not enough tokens yet for ${i.the}.`, `It costs ${n(i.price)} and the office has ${n(left)} to spend.`, 'Every token Claude writes from now on adds to it: come back after some work.');
   bought.push({ item: i.id, price: i.price, at: now.toISOString() });
-  fs.mkdirSync(office.dataDir, { recursive: true });
-  const tmp = `${fileOf(office)}.${process.pid}.tmp`;
-  fs.writeFileSync(tmp, JSON.stringify({ bought }, null, 1));
-  fs.renameSync(tmp, fileOf(office));
+  writeJson(fileOf(office), { bought }, 1);
   return { ok: true, item: i.id, shop: shopOf(office, earned) };
 }

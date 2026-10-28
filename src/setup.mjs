@@ -24,7 +24,7 @@ function readSettings(file) {
     throw e;
   }
   // A file saved by Notepad can start with a byte-order mark: Claude Code accepts it, so the office does too.
-  try { return { data: JSON.parse(text.replace(/^﻿/, '') || '{}'), text }; } catch {
+  try { return { data: JSON.parse(text.replace(/^\uFEFF/, '') || '{}'), text }; } catch {
     return { error: { fault: 'Claude\'s settings file could not be read.', reason: `${file} is not valid JSON, so the office will not touch it.`, wayOut: 'Fix the file (or let Claude fix it), then try again.' } };
   }
 }
@@ -34,7 +34,10 @@ function readSettings(file) {
  * a path holding one of those (or a ") before anything is written. */
 export const UNSAFE_HOOK_PATH = /[$`"%\r\n]/;
 export function hookCommand(hookScript, port) {
-  return `node "${hookScript.replace(/\\/g, '/')}" ${port} --${MARK}`;
+  // A copy put here by the installer brings its own Node.js in node\, and the PC may have no other: use that one.
+  const bundled = path.join(path.dirname(hookScript), 'node', 'node.exe');
+  const node = fs.existsSync(bundled) ? `"${bundled.replace(/\\/g, '/')}"` : 'node';
+  return `${node} "${hookScript.replace(/\\/g, '/')}" ${port} --${MARK}`;
 }
 
 /** Every mark this office has written: today's, and the one from before the rename in 0.1.7. Only these count as ours:

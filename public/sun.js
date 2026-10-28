@@ -88,8 +88,13 @@
       const choice = html.dataset.themeChoice || html.dataset.theme || 'light';
       const want = resolve(choice);
       if (html.dataset.theme !== want) html.dataset.theme = want;
-      for (const b of doc.querySelectorAll('[data-theme-pick]')) {
+      const picks = [...doc.querySelectorAll('[data-theme-pick]')];
+      // One stop for Tab, as a radio group has: the choice in use (the first, for Match Windows, which is not on it);
+      // the arrow keys move along it.
+      const stop = picks.find((b) => b.dataset.themePick === choice) || picks[0];
+      for (const b of picks) {
         b.setAttribute('aria-checked', String(b.dataset.themePick === choice));
+        b.tabIndex = b === stop ? 0 : -1;
         if (b.dataset.themePick === 'auto') b.title = `Auto: light from sunrise to sunset, dark at night. ${today()}`;
       }
     };
@@ -103,6 +108,19 @@
       const b = e.target.closest?.('[data-theme-pick]');
       if (!b) return;
       try { await choose(b.dataset.themePick); } catch (err) { window.aiOffice?.showFault?.(err); }
+    });
+    // The arrow keys (and Home, End) move to the next choice and pick it, as in any radio group.
+    doc.addEventListener('keydown', async (e) => {
+      const b = e.target.closest?.('[data-theme-pick]');
+      const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[e.key];
+      if (!b || (!step && e.key !== 'Home' && e.key !== 'End')) return;
+      e.preventDefault();
+      const picks = [...b.parentElement.querySelectorAll('[data-theme-pick]')];
+      const i = picks.indexOf(b);
+      const to = e.key === 'Home' ? picks[0] : e.key === 'End' ? picks.at(-1) : picks[(i + step + picks.length) % picks.length];
+      for (const p of picks) p.tabIndex = p === to ? 0 : -1;
+      to.focus();
+      try { await choose(to.dataset.themePick); } catch (err) { window.aiOffice?.showFault?.(err); apply(); }
     });
     setInterval(apply, 60000);
     doc.addEventListener('visibilitychange', apply);

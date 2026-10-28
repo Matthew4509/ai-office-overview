@@ -82,15 +82,25 @@ export async function gitConfigProblem(dir) {
 
 // ---- Asking and taking ----
 // Hooks point at an empty folder, fsmonitor is off, and git never stops to ask for a password.
+// The folder is made new, with a name no other user can guess and claim first, and taken away when the office ends.
+let NO_HOOKS = '';
 function noHooks() {
-  const d = path.join(os.tmpdir(), 'ai-office-no-hooks');
-  try { fs.mkdirSync(d, { recursive: true }); } catch { /* git then finds no hooks there either */ }
-  return d;
+  if (NO_HOOKS && fs.existsSync(NO_HOOKS)) return NO_HOOKS;
+  try {
+    NO_HOOKS = fs.mkdtempSync(path.join(os.tmpdir(), 'ai-office-no-hooks-'));
+    process.once('exit', () => { try { fs.rmSync(NO_HOOKS, { recursive: true, force: true }); } catch { /* temp folder */ } });
+  } catch {
+    // A folder that is not there holds no hooks either.
+    NO_HOOKS = path.join(os.tmpdir(), `ai-office-no-hooks-${process.pid}-${Date.now()}-missing`);
+  }
+  return NO_HOOKS;
 }
 function git(dir, args, timeout = 8000) {
   return new Promise((resolve) => {
     execFile('git', ['-c', 'core.fsmonitor=false', '-c', `core.hooksPath=${noHooks()}`, '-c', 'log.showSignature=false', '-C', dir, ...args], {
       timeout, windowsHide: true, maxBuffer: 4 * 1024 * 1024,
+      // The PC-wide git config is used (Git for Windows keeps its HTTPS certificates and sign-in there); only the
+      // administrator can change it, so it is not checked like the folder's own config.
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0', GIT_OPTIONAL_LOCKS: '0', LC_ALL: 'C' },
     }, (err, stdout, stderr) => resolve({ ok: !err, missing: err?.code === 'ENOENT', out: String(stdout || '').trimEnd(), err: String(stderr || err?.message || '').trim() }));
   });

@@ -8,12 +8,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tempHome } from './helpers.mjs';
 import * as install from '../src/install.mjs';
 import { withOurs } from '../src/setup.mjs';
 
 const onWindows = process.platform === 'win32';
-const TOOL = path.join(import.meta.dirname, '..', 'tools', 'setup.mjs');
+const TOOL = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tools', 'setup.mjs');
 const lnk = (dir, where) => path.join(dir, where, 'AI Office Overview.lnk');
 const BEEPS = { model: 'opus', hooks: { Stop: [{ hooks: [{ type: 'command', command: '[console]::beep(659,90)', shell: 'powershell', timeout: 5 }] }] } };
 

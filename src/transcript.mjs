@@ -151,8 +151,11 @@ export function wordsFor(name, input) {
  * The question a reply ends on, or ''. A reply asks when one of its last lines ends with a question mark; the first
  * such line is given (a numbered list of questions reads from its top). Words like "let me know" are not enough.
  */
+// Only Markdown's own marks come off: a quote's leading >, a heading's #, bold ** and code backticks. A > or an
+// underscore inside the words (<b>, my_project) is part of the question and stays.
+const plainLine = (s) => s.replace(/^\s*(?:>\s*)+/, '').replace(/^\s*#+\s+/, '').replace(/\*\*|`/g, '').trim();
 export function questionIn(text) {
-  const lines = String(text || '').split('\n').map((s) => s.replace(/[*_`#>]/g, '').trim()).filter(Boolean);
+  const lines = String(text || '').split('\n').map(plainLine).filter(Boolean);
   const tail = lines.slice(-12);
   const asks = tail.filter((l) => /\?["')\]]?$/.test(l) && !/^https?:/.test(l));
   return asks.length ? asks[0].slice(0, 200) : '';
@@ -210,7 +213,8 @@ export function addLine(t, l) {
       t.asked = '';
       if (failedResult(c)) snagAt(t, at, 'failed');
       for (const x of c) {
-        const what = x && x.type === 'tool_result' && t.pending?.[x.tool_use_id];
+        // Own keys only: a tool id such as "constructor" must not find something every object has.
+        const what = x && x.type === 'tool_result' && t.pending && Object.hasOwn(t.pending, x.tool_use_id) && t.pending[x.tool_use_id];
         if (!what) continue;
         delete t.pending[x.tool_use_id];
         if (what === 'test') eventAt(t, at, x.is_error ? 'tests-failed' : 'tests-passed');
@@ -270,7 +274,7 @@ export function addLine(t, l) {
         const p = input.file_path || input.notebook_path;
         if (p) {
           t.edits = t.edits || {};
-          const n = (t.edits[p] = (t.edits[p] || 0) + 1);
+          const n = (t.edits[p] = (Object.hasOwn(t.edits, p) ? Number(t.edits[p]) || 0 : 0) + 1);
           if ([3, 6, 10].includes(n)) eventAt(t, at, 'again', { file: String(p).split(/[\\/]/).pop().slice(0, 60), n });
         }
         if (p && !t.wrote.includes(p)) t.wrote.push(p);
@@ -309,6 +313,18 @@ export function addLine(t, l) {
  * on, so a file is read and each line parsed once for both. Answers the new offset (a half-written last line is left
  * for next time).
  */
+/** Whether `offset` still sits just after a line end in the file. A read always stops after one, so when it does not, the
+ * file was written again in place (and may be larger than before): it must be read from the start. */
+export function stillAfterLineEnd(file, offset) {
+  if (!offset) return true;
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const b = Buffer.alloc(1);
+    return fs.readSync(fd, b, 0, 1, offset - 1) === 1 && b[0] === 10;
+  } catch { return true; } finally { if (fd !== undefined) try { fs.closeSync(fd); } catch {} }
+}
+
 export function readFrom(file, t, offset = 0, also = null) {
   let fd;
   try { fd = fs.openSync(file, 'r'); } catch { return offset; }
@@ -327,7 +343,8 @@ export function readFrom(file, t, offset = 0, also = null) {
       pos += n;
       let data = carry.length ? Buffer.concat([carry, buf.subarray(0, n)]) : buf.subarray(0, n);
       let start = 0;
-      for (let i = 0; i < data.length; i++) {
+      // The carried part has no line end in it (it was looked through already): a very long line is not scanned again.
+      for (let i = carry.length; i < data.length; i++) {
         if (data[i] !== 10) continue;
         const at = base + start;
         const line = data.toString('utf8', start, i).trim();

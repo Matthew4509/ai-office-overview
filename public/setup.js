@@ -16,11 +16,24 @@
   const row = (title, sub, ...acts) => el('div', { class: 'set-row' }, el('div', { class: 'set-txt' }, el('b', { text: title }), sub ? el('span', { class: 'note', text: sub }) : null), el('div', { class: 'row set-acts' }, ...acts));
   const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
   const close = () => { sheet.hidden = true; };
+  let pressed = null;
+  sheet.addEventListener('click', (e) => { pressed = e.target.closest?.('button') || null; }, true);
 
   async function show(which, then) {
+    const moved = !!which && which !== section;
     if (which) section = which;
-    // A tab pressed from the keyboard keeps the focus on the (new) tab when the window is drawn again.
-    const onTab = sheet.contains(document.activeElement) && document.activeElement.getAttribute('role') === 'tab';
+    // A tab pressed keeps the focus on the (new) tab when the window is drawn again. A button in the tab (Apply, Turn
+    // on advanced setup, a theme) is found again in the new drawing: by its words, else the one in its place (Turn on
+    // becomes Go back), else the tab itself; so the focus is never lost to the page behind.
+    // (A button greyed while it works has lost the focus already: the one last pressed stands in for it.)
+    const open = !sheet.hidden;
+    const was = !open ? null : sheet.contains(document.activeElement) && document.activeElement !== sheet ? document.activeElement
+      : pressed?.isConnected && sheet.contains(pressed) ? pressed : null;
+    // Another tab opened (from the keyboard or not): the focus goes to that tab.
+    const onTab = !!was && (moved || was.getAttribute('role') === 'tab');
+    const wasButtons = was && !onTab ? [...sheet.querySelectorAll('.set-body button')] : [];
+    const wasAt = wasButtons.indexOf(was);
+    const wasWords = was?.textContent;
     const tabs = el('div', { class: 'side-tabs', role: 'tablist', 'aria-label': 'Setup' }, SECTIONS.map(([id, name]) => el('button', { type: 'button', role: 'tab', 'aria-selected': String(section === id), onclick: () => { say(''); show(id); } }, name)));
     const body = el('div', { class: 'set-body' }, el('p', { class: 'note', text: 'Reading…' }));
     const box = el('div', { class: 'sheet-box wide', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'setup-title' },
@@ -30,6 +43,10 @@
     sheet.hidden = false;
     if (onTab) tabs.querySelector('[aria-selected="true"]')?.focus();
     try { body.replaceChildren(...[await DRAW[section]()].flat().filter(Boolean)); } catch (e) { body.replaceChildren(el('p', { text: fault(e) })); }
+    if (was && !onTab && !sheet.hidden && !sheet.contains(document.activeElement)) {
+      const now = [...body.querySelectorAll('button')];
+      (now.find((b) => b.textContent === wasWords) || (wasAt >= 0 ? now[wasAt] : null) || tabs.querySelector('[aria-selected="true"]'))?.focus();
+    }
     then?.();
   }
   /** Opens the window on one tab; `then` runs once that tab is drawn (the Choose it line focuses the folder box). */

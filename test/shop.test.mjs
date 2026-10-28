@@ -153,3 +153,42 @@ test('the trophy case comes only once every room is unlocked, every piece bought
   assert.deepEqual(trophyOf(all), { at: done }, 'dated by the purchase that finished it, not by later ones');
   assert.equal(trophyOf(all.filter((b, i) => !(b.item === 'deckchair' && i === all.findIndex((x) => x.item === 'deckchair')))), null, 'one deck chair short: no trophy');
 });
+
+test('a purchase while another program holds data/office.json is refused, and what was bought before is kept', () => {
+  const h = tempHome();
+  const real = fs.readFileSync;
+  try {
+    const office = opened(h);
+    assert.equal(buy(office, 'coffee').ok, true);
+    const kept = path.join(h.data, 'office.json');
+    const before = real(kept, 'utf8');
+    fs.readFileSync = function (f, ...rest) {
+      if (String(f) === kept) { const e = new Error('EBUSY: resource busy or locked'); e.code = 'EBUSY'; throw e; }
+      return real.call(this, f, ...rest);
+    };
+    const r = buy(office, 'icecream');
+    fs.readFileSync = real;
+    assert.match(r.error.fault, /could not read what was bought/);
+    assert.match(r.error.reason, /EBUSY/);
+    assert.equal(real(kept, 'utf8'), before, 'the coffee round is still there');
+    assert.ok(!fs.readdirSync(h.data).some((n) => n.includes('.damaged-')), 'nothing set aside as damaged');
+  } finally {
+    fs.readFileSync = real;
+    h.done();
+  }
+});
+
+test('data/office.json saved with a byte-order mark is read', () => {
+  const h = tempHome();
+  try {
+    const office = opened(h);
+    assert.equal(buy(office, 'coffee').ok, true);
+    const kept = path.join(h.data, 'office.json');
+    fs.writeFileSync(kept, '\uFEFF' + fs.readFileSync(kept, 'utf8'));
+    assert.equal(shopOf(office, office.snapshot().earned).items.find((i) => i.id === 'coffee') !== undefined, true);
+    assert.equal(buy(office, 'icecream').ok, true);
+    assert.equal(JSON.parse(fs.readFileSync(kept, 'utf8')).bought.length, 2, 'the coffee round was kept');
+  } finally {
+    h.done();
+  }
+});

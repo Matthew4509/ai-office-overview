@@ -64,9 +64,10 @@ button { cursor: pointer; }
 .theme-switch svg .fill { fill: currentColor; stroke: none; }
 
 /* Three columns: the projects | the office (and its tabs) | the right panel. Under 1200 px the projects go above as a row
-   of buttons; under 900 px everything stacks. */
-.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr) 370px; gap: 16px; padding: 16px; align-items: start; }
-@media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr) 370px; } .filter { grid-column: 1 / -1; } }
+   of buttons; under 900 px everything stacks. The right panel gives way down to 320 px on a narrower window, so the
+   office keeps more of the row. */
+.layout { display: grid; grid-template-columns: 190px minmax(0, 1fr) clamp(320px, 27vw, 370px); gap: 16px; padding: 16px; align-items: start; }
+@media (max-width: 1200px) { .layout { grid-template-columns: minmax(0, 1fr) clamp(320px, 30vw, 370px); } .filter { grid-column: 1 / -1; } }
 @media (max-width: 900px) { .layout { grid-template-columns: minmax(0, 1fr); } }
 
 .middle, .side, .filter { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 12px; min-width: 0; }
@@ -176,7 +177,14 @@ button { cursor: pointer; }
 .shop-item .what span { display: block; color: var(--soft); font-size: 13px; }
 pre.code { background: var(--page); border: 1px solid var(--line); border-radius: 8px; padding: 10px; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 
-.fault { position: fixed; left: 16px; right: 16px; bottom: 16px; margin: 0; padding: 10px 14px; background: var(--fault-bg); color: var(--fault-ink); border-radius: 10px; z-index: 20; }
+.fault { position: fixed; left: 16px; right: 16px; bottom: 16px; margin: 0; padding: 10px 14px; background: var(--fault-bg); color: var(--fault-ink); border-radius: 10px; z-index: 20; display: flex; gap: 12px; align-items: center; }
+.fault > p { margin: 0; flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.fault > .btn { flex: none; }
+/* A fault by a person's card (a button on it that did not work). */
+.card-said { margin: 4px 0 8px; padding: 6px 10px; border-radius: 8px; background: var(--fault-bg); color: var(--fault-ink); font-size: 13px; overflow-wrap: anywhere; }
+.card-said:empty { display: none; }
+/* Read out, not shown: what a person's card says has changed (only when it has). */
+.sr-only { position: fixed; top: 0; left: 0; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 /* Always three lines tall (name, what they do, what they hold), so the office above it never jumps when someone is picked. */
 /* The line about the person picked (or a locked room) sits to the right of the office, where the eye goes; under it on a narrow screen. */
 #office { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }

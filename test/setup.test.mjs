@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { apply, status, onHook, withOurs, withoutOurs, hookCommand, UNSAFE_HOOK_PATH } from '../src/setup.mjs';
 import { Office } from '../src/office.mjs';
 import { tempHome, lines, ROOT } from './helpers.mjs';
@@ -167,9 +168,10 @@ test('a permission prompt from a hook makes the thread "Needs you" at once; "wai
 });
 
 test('the hook script ends cleanly and prints nothing when the office is closed', () => {
-  const r = spawnSync(process.execPath, [path.join(import.meta.dirname, '..', 'hook.mjs'), '1', '--ai-office-overview-hook'], { input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'x' }), timeout: 5000 });
+  const r = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'hook.mjs'), '1', '--ai-office-overview-hook'], { input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'x' }), timeout: 5000 });
   assert.equal(r.status, 0);
   assert.equal(String(r.stdout), '');
+  assert.equal(String(r.stderr), '');
 });
 
 test('a folder path with $, a backtick, a " or % is refused for advanced setup, and the settings file is not touched', () => {
@@ -207,6 +209,30 @@ test('after the office folder moves, status says the hooks no longer point here,
     assert.equal(again.ok, true);
     assert.equal(again.status.hookHere, true);
     assert.equal(status(office).hookHere, null, 'not asked without a place');
+  } finally {
+    delete process.env.AI_OFFICE_SETTINGS;
+    h.done();
+  }
+});
+
+test('a copy the installer put here (its own node\\node.exe) writes hooks that run that Node.js, not one on the PATH', () => {
+  const h = tempHome();
+  try {
+    withSettings(h, BEEPS);
+    const folder = path.join(h.dir, 'AI Office Overview');
+    fs.mkdirSync(path.join(folder, 'node'), { recursive: true });
+    fs.writeFileSync(path.join(folder, 'node', 'node.exe'), '');
+    const here = { port: 8860, hookScript: path.join(folder, 'hook.mjs') };
+    const cmd = hookCommand(here.hookScript, 8860);
+    const slash = (p) => p.replace(/\\/g, '/');
+    assert.equal(cmd, `"${slash(path.join(folder, 'node', 'node.exe'))}" "${slash(here.hookScript)}" 8860 --ai-office-overview-hook`);
+    assert.equal(hookCommand('C:\\x\\plain copy\\hook.mjs', 8860), 'node "C:/x/plain copy/hook.mjs" 8860 --ai-office-overview-hook', 'no node folder: node from the PATH');
+    const office = new Office({ dataDir: h.data, transcriptsDir: h.transcripts });
+    const on = apply(office, { advanced: true }, here);
+    assert.equal(on.status.hookHere, true);
+    assert.equal(status(office, { port: 8860, hookScript: 'C:\\x\\plain copy\\hook.mjs' }).hookHere, false, 'hooks written before, with plain node, are offered again');
+    const off = apply(office, { advanced: false }, here);
+    assert.equal(off.status.mode, 'easy', 'the quoted node path still counts as ours');
   } finally {
     delete process.env.AI_OFFICE_SETTINGS;
     h.done();

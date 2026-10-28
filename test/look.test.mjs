@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import vm from 'node:vm';
+import { fileURLToPath } from 'node:url';
 import { LOOK_OPTIONS, cleanLook } from '../src/look.mjs';
 import { Office } from '../src/office.mjs';
 import { tempHome } from './helpers.mjs';
@@ -12,7 +13,7 @@ const LOOK = { gender: 'woman', skin: 'tan', hair: 'bob', hairColour: 'auburn', 
 test('the page and the server know the same parts and colours', () => {
   const ctx = { window: { devicePixelRatio: 1 }, document: { createElement: () => ({ getContext: () => new Proxy({}, { get: () => () => {} }), style: {}, setAttribute() {} }) } };
   vm.createContext(ctx);
-  vm.runInContext(fs.readFileSync(path.join(import.meta.dirname, '..', 'public', 'look.js'), 'utf8'), ctx);
+  vm.runInContext(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public', 'look.js'), 'utf8'), ctx);
   assert.deepEqual(JSON.parse(JSON.stringify(ctx.window.officeLook.options())), LOOK_OPTIONS);
 });
 
