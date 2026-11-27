@@ -24,32 +24,59 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 process.chdir(here);
 const PORT = Number(process.env.PORT) || 8860;
 const dataDir = process.env.AI_OFFICE_DATA || path.join(here, 'data');
-/** Which office runs over this data folder: { pid, port, started }, written at start and removed at a clean stop. */
+/** Which office runs over this data folder: { pid, port, key, started }, written at start and removed at a clean stop. */
 const RUN_FILE = path.join(dataDir, 'run.json');
-function running() {
+function readRun() {
   let r;
   try { r = JSON.parse(fs.readFileSync(RUN_FILE, 'utf8')); } catch { return null; }
-  if (!Number.isInteger(r?.pid) || r.pid <= 0) return null;
-  try { process.kill(r.pid, 0); } catch { return null; } // a stale file from a window that was closed: nothing runs
+  if (!Number.isInteger(r?.port) || r.port <= 0 || r.port > 65535 || typeof r.key !== 'string' || !r.key) return null;
   return r;
 }
+/** Asks the office named in run.json, with its key, who it is. A process id alone proves nothing: after a hard stop
+ * (Task Manager, a power cut) Windows can give it to any other program. Only this office, with this key, answers. */
+function ask(r, method, pathname) {
+  return new Promise((resolve) => {
+    const q = http.request({ host: '127.0.0.1', port: r.port, path: pathname, method, timeout: 3000,
+      headers: { host: `127.0.0.1:${r.port}`, 'x-ai-office-key': r.key, 'content-type': 'application/json', connection: 'close' } }, (res) => {
+      let body = '';
+      res.setEncoding('utf8');
+      res.on('data', (c) => { if (body.length < 100_000) body += c; });
+      res.on('end', () => { let json = null; try { json = JSON.parse(body); } catch { /* not the office */ } resolve({ status: res.statusCode, json }); });
+    });
+    q.on('timeout', () => q.destroy());
+    q.on('error', () => resolve(null));
+    q.end(method === 'POST' ? '{}' : undefined);
+  });
+}
+const isOffice = (a) => a?.status === 200 && a.json?.app === 'ai-office-overview' && typeof a.json.version === 'string';
+/** The office running over this data folder, proven by its answer; null when none is (a stale run file is ignored). */
+async function running() {
+  const r = readRun();
+  if (!r) return null;
+  return isOffice(await ask(r, 'GET', '/api/ping')) ? r : null;
+}
 if (process.argv.includes('--stop') || process.argv.includes('--status')) {
-  const r = running();
+  const r = await running();
   if (process.argv.includes('--status')) {
     console.log(r ? `AI Office Overview is running: http://127.0.0.1:${r.port}/ (started ${r.started}).` : 'AI Office Overview is not running.');
     process.exit(r ? 0 : 1);
   }
-  if (!r) { console.log('AI Office Overview is not running.'); process.exit(0); }
-  try { process.kill(r.pid); } catch { /* gone between the check and now */ }
-  const until = Date.now() + 8000;
-  while (Date.now() < until) {
-    try { process.kill(r.pid, 0); } catch { break; }
-    await new Promise((res) => setTimeout(res, 100));
+  // Nothing is ever ended by its process id: the office is asked to Quit with its own key, and saves first.
+  if (!r) {
+    try { if (fs.existsSync(RUN_FILE)) fs.unlinkSync(RUN_FILE); } catch { /* left for the next start, which ignores it */ }
+    console.log('AI Office Overview is not running.');
+    process.exit(0);
   }
-  let still = true;
-  try { process.kill(r.pid, 0); } catch { still = false; }
-  if (still) { console.error(`AI Office Overview (process ${r.pid}) did not stop.`); process.exit(1); }
-  try { fs.unlinkSync(RUN_FILE); } catch { /* already gone */ }
+  const a = await ask(r, 'POST', '/api/quit');
+  if (a?.status !== 200) {
+    console.error(`AI Office Overview did not accept the stop: ${a?.json?.error?.reason || 'it did not answer'}`);
+    process.exit(1);
+  }
+  const until = Date.now() + 10000;
+  while (Date.now() < until && isOffice(await ask(r, 'GET', '/api/ping'))) await new Promise((res) => setTimeout(res, 150));
+  if (isOffice(await ask(r, 'GET', '/api/ping'))) { console.error('AI Office Overview did not stop.'); process.exit(1); }
+  // The office takes its run file with it; give it a moment to finish exiting.
+  for (let i = 0; i < 20 && fs.existsSync(RUN_FILE); i++) await new Promise((res) => setTimeout(res, 100));
   console.log('AI Office Overview has stopped.');
   process.exit(0);
 }
@@ -156,6 +183,8 @@ const server = http.createServer(async (req, res) => {
     return fail(res, 403, 'This page is from an older run of the office.', 'The office was started again since the page was opened, so its key has changed.', 'Reload the page.');
   }
   try {
+    // node server.mjs --status and --stop ask this with the key from run.json: only this run of the office answers it.
+    if (req.method === 'GET' && url.pathname === '/api/ping') return send(res, 200, { app: 'ai-office-overview', version: VERSION, port: PORT });
     if (req.method === 'GET' && url.pathname === '/api/state') {
       const s = office.snapshot({ preview: !!loading });
       return send(res, 200, { ...s, loading, shop: shopOf(office, s.earned), scanError: lastScanError, setup: setup.status(office, { port: PORT, hookScript: path.join(here, 'hook.mjs') }), version: VERSION });
@@ -305,8 +334,9 @@ async function load() {
 }
 
 // An office already running over this data folder (on this port or another): two would count the ledger twice.
-const already = running();
-if (already && already.pid !== process.pid) {
+// It must answer as this office with the key in run.json; a run file left by a hard stop is ignored.
+const already = await running();
+if (already) {
   console.error(`AI Office Overview is already running at http://127.0.0.1:${already.port}/ with this data folder. Open that address, or stop it first: node server.mjs --stop`);
   process.exit(1);
 }
@@ -314,7 +344,13 @@ if (already && already.pid !== process.pid) {
 server.listen(PORT, '127.0.0.1', () => {
   console.log(`AI Office Overview is open: http://127.0.0.1:${PORT}/ (keep this window open while you use it)`);
   console.log(`Reading ${office.transcriptsDir}; keeping its own files in ${dataDir}.`);
-  try { fs.mkdirSync(dataDir, { recursive: true }); fs.writeFileSync(RUN_FILE, `${JSON.stringify({ pid: process.pid, port: PORT, started: new Date().toISOString() })}\n`); } catch { /* --stop then needs the window */ }
+  // Written to a temp file and swapped in, so a torn run file is never read. The key lets --stop ask for a Quit.
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    const tmp = `${RUN_FILE}.${process.pid}.tmp`;
+    fs.writeFileSync(tmp, `${JSON.stringify({ pid: process.pid, port: PORT, key: KEY, started: new Date().toISOString() })}\n`);
+    fs.renameSync(tmp, RUN_FILE);
+  } catch { /* --stop then needs the window */ }
   // Start AI Office Overview.cmd asks for the page to open: it opens at once and shows the reading as it goes.
   if (process.argv.includes('--open') && process.env.AI_OFFICE_OPEN !== '0' && win.isWindows) win.openUrl(`http://127.0.0.1:${PORT}/`);
   load();

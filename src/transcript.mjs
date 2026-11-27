@@ -193,17 +193,30 @@ function pushStep(t, at, words) {
   if (t.steps.length > 8) t.steps.shift();
 }
 
+/**
+ * A line's time as written, or '' when it is not one the office can use: not text (a number, true), not a date, or
+ * more than 5 minutes ahead of this PC's clock (written while a clock ran fast). Last activity only ever moves later,
+ * so one line dated ahead would otherwise hide every real question asked until that date.
+ */
+const AHEAD_MS = 5 * 60_000;
+export function timeOf(v) {
+  if (typeof v !== 'string' || !v) return '';
+  const ms = Date.parse(v);
+  if (Number.isNaN(ms) || ms > Date.now() + AHEAD_MS) return '';
+  return v;
+}
+
 /** Adds one parsed line to a summary. */
 export function addLine(t, l) {
   if (!l || typeof l !== 'object') return;
   if (l.type === 'custom-title' && l.customTitle) { t.title = String(l.customTitle); return; }
   if (l.type !== 'user' && l.type !== 'assistant') return;
-  const at = l.timestamp || '';
-  if (at) {
-    if (!t.startedAt) t.startedAt = at;
-    if (at > t.lastAt) t.lastAt = at;
-  }
-  if (l.cwd) { t.cwd = l.cwd; if (!t.startCwd) t.startCwd = l.cwd; }
+  const at = timeOf(l.timestamp);
+  // A time that is ahead, or text that is not a date, still says the thread has begun (it shows, gone home), but never
+  // moves its last activity.
+  if (!t.startedAt && (at || (typeof l.timestamp === 'string' && l.timestamp))) t.startedAt = at || l.timestamp;
+  if (at && at > t.lastAt) t.lastAt = at;
+  if (typeof l.cwd === 'string' && l.cwd) { t.cwd = l.cwd; if (!t.startCwd) t.startCwd = l.cwd; }
   const m = l.message || {};
   if (l.type === 'user') {
     const c = m.content;
@@ -280,7 +293,7 @@ export function addLine(t, l) {
         if (p && !t.wrote.includes(p)) t.wrote.push(p);
         t.worked = true;
       } else if (SHELLS.has(b.name) && input.command && !onlyLooks(input.command)) {
-        t.ran.push({ cmd: String(input.command).slice(0, 300), cwd: commandFolder(input.command, l.cwd) });
+        t.ran.push({ cmd: String(input.command).slice(0, 300), cwd: commandFolder(input.command, typeof l.cwd === 'string' ? l.cwd : t.cwd) });
         if (t.ran.length > 200) t.ran.shift();
         t.worked = true;
       }

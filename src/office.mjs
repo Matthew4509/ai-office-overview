@@ -21,7 +21,7 @@ export const safeKey = (k) => { const s = String(k); return !UNSAFE_KEYS.has(s) 
 /** The most hook events kept (one per thread id): a local program that posts made-up ids cannot grow the file without limit. */
 const HOOKS_MAX = 2000;
 /** Bump when the summary's shape changes: the cache is then read again from the start. */
-const CACHE_VERSION = 5;
+const CACHE_VERSION = 6;
 
 /** How long a hook event is kept over a restart (older ones no longer change anyone's state). */
 const HOOK_KEEP_MS = 24 * 3600 * 1000;
@@ -30,25 +30,72 @@ function readJson(file, fallback) {
   try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return fallback; }
 }
 
+const isPlain = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
+/** What a hand-edited or damaged file may still hold, cut to the shapes the office reads (from AI Head Office
+ * Overview's office). A record of the wrong kind (null, a number, a list) is dropped rather than break every snapshot. */
+const THEME_NAMES = ['auto', 'dark', 'light', 'system'];
+export function cleanSettings(s) {
+  const o = isPlain(s) ? { ...s } : {};
+  if (typeof o.openedAt !== 'string' || Number.isNaN(Date.parse(o.openedAt))) delete o.openedAt;
+  if (!(Number.isFinite(o.quietMinutes) && o.quietMinutes >= 5 && o.quietMinutes <= 1440)) delete o.quietMinutes;
+  if (typeof o.root !== 'string') delete o.root;
+  if (!THEME_NAMES.includes(o.theme)) delete o.theme;
+  if (Array.isArray(o.favProjects)) o.favProjects = o.favProjects.filter((x) => typeof x === 'string'); else delete o.favProjects;
+  return o;
+}
+export function cleanSeats(s) {
+  const out = {};
+  for (const [folder, seats] of Object.entries(isPlain(s) ? s : {})) {
+    if (!safeKey(folder) || !isPlain(seats)) continue;
+    out[folder] = Object.fromEntries(Object.entries(seats).filter(([n, rec]) => safeKey(n) && isPlain(rec)));
+  }
+  return out;
+}
+export function cleanLedger(l) {
+  const threads = {};
+  for (const [id, rec] of Object.entries(isPlain(l) && isPlain(l.threads) ? l.threads : {})) {
+    if (!safeKey(id) || !isPlain(rec) || typeof rec.folder !== 'string' || !Number.isInteger(rec.seat) || rec.seat < 0) continue;
+    // Only what is of the wrong kind changes, so a sound ledger reads back exactly as it was.
+    const r = { ...rec };
+    for (const k of ['title', 'startedAt', 'lastAt', 'asked']) if (k in r && typeof r[k] !== 'string') delete r[k];
+    for (const k of ['out', 'outSince']) if (k in r && !(Number.isFinite(r[k]) && r[k] >= 0 && r[k] <= 1e12)) r[k] = 0;
+    if ('outByDay' in r) {
+      if (!isPlain(r.outByDay)) delete r.outByDay;
+      else if (Object.entries(r.outByDay).some(([d, n]) => !safeKey(d) || !(Number.isFinite(n) && n >= 0))) r.outByDay = Object.fromEntries(Object.entries(r.outByDay).filter(([d, n]) => safeKey(d) && Number.isFinite(n) && n >= 0));
+    }
+    threads[id] = r;
+  }
+  return { ...(isPlain(l) ? l : {}), threads };
+}
+export const cleanDone = (d) => Object.fromEntries(Object.entries(isPlain(d) ? d : {}).filter(([id, v]) => safeKey(id) && typeof v === 'string'));
+
+const asideName = (file) => `${file.replace(/\.json$/, '')}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+function setAside(file, why) {
+  const aside = asideName(file);
+  try { fs.copyFileSync(file, aside); console.error(`[data] ${path.basename(file)} ${why}: kept a copy as ${path.basename(aside)}.`); } catch { /* nothing to keep */ }
+}
+
 /**
  * One of the office's own files (data/). Missing: the fallback. There but damaged (not JSON, or not an object): copied
  * aside first (name.damaged-<time>.json), so the next save cannot wipe deleted threads, nicknames or the purse start.
+ * A byte-order mark (Notepad) is read past. With `clean`, what was read is cut to the shapes the office uses; when
+ * that dropped or repaired something, the file is copied aside too.
  * There but held by another program (an antivirus at start): tried again, then the office refuses to start rather
  * than treat a file it could not read as damaged and write over it.
  */
-function readKept(file, fallback) {
+function readKept(file, fallback, clean) {
   let text;
   try { text = readText(file); } catch (e) {
     if (e.code === 'ENOENT') return fallback;
     throw new Error(`${path.basename(file)} in the office's data folder could not be read (${e.code || e.message}). Nothing was changed: close whatever holds it, then start the office again.`);
   }
-  try {
-    const data = JSON.parse(text);
-    if (data && typeof data === 'object' && !Array.isArray(data)) return data;
-  } catch { /* copied aside below */ }
-  const aside = `${file.replace(/\.json$/, '')}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-  try { fs.copyFileSync(file, aside); console.error(`[data] ${path.basename(file)} could not be read: kept a copy as ${path.basename(aside)} and started it empty.`); } catch { /* nothing to keep */ }
-  return fallback;
+  let data;
+  try { data = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { data = undefined; }
+  if (!isPlain(data)) { setAside(file, 'could not be read, and was started empty'); return fallback; }
+  if (!clean) return data;
+  const cleaned = clean(data);
+  if (JSON.stringify(cleaned) !== JSON.stringify(data)) setAside(file, 'had records the office could not use, which were left out');
+  return cleaned;
 }
 
 export class Office {
@@ -60,16 +107,15 @@ export class Office {
     this.transcriptsDir = o.transcriptsDir || path.join(os.homedir(), '.claude', 'projects');
     this.now = o.now || (() => Date.now());
     this.file = (n) => path.join(this.dataDir, n);
-    this.settings = readKept(this.file('settings.json'), {});
+    this.settings = readKept(this.file('settings.json'), {}, cleanSettings);
     if (!this.settings.openedAt) {
       this.settings.openedAt = new Date(this.now()).toISOString();
       this.saveSettings();
     }
     if (!this.settings.quietMinutes) this.settings.quietMinutes = 60;
-    this.seatNames = readKept(this.file('seats.json'), {});
-    this.ledger = readKept(this.file('ledger.json'), { threads: {} });
-    if (!this.ledger.threads || typeof this.ledger.threads !== 'object') this.ledger.threads = {};
-    this.done = readKept(this.file('done.json'), {});
+    this.seatNames = readKept(this.file('seats.json'), {}, cleanSeats);
+    this.ledger = readKept(this.file('ledger.json'), { threads: {} }, cleanLedger);
+    this.done = readKept(this.file('done.json'), {}, cleanDone);
     const cache = readJson(this.file('cache.json'), {});
     /** file path -> { offset, size, mtime, t } */
     this.files = cache.version === CACHE_VERSION && cache.since === this.settings.openedAt ? cache.files || {} : {};
