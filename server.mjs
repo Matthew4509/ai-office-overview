@@ -12,7 +12,7 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { Office, safeKey } from './src/office.mjs';
+import { Office, folderKey, seatKey } from './src/office.mjs';
 import { shopOf, buy } from './src/shop.mjs';
 import * as setup from './src/setup.mjs';
 import * as update from './src/update.mjs';
@@ -80,7 +80,12 @@ if (process.argv.includes('--stop') || process.argv.includes('--status')) {
   console.log('AI Office Overview has stopped.');
   process.exit(0);
 }
-const office = new Office({ dataDir, transcriptsDir: process.env.AI_OFFICE_TRANSCRIPTS });
+// A data file another program holds at start (an antivirus, a backup) stops the start with a plain line, not a stack.
+let office;
+try { office = new Office({ dataDir, transcriptsDir: process.env.AI_OFFICE_TRANSCRIPTS }); } catch (e) {
+  console.error(`AI Office Overview could not start: ${e?.code === 'EHELD' ? e.message : `its data folder could not be read (${e?.code || 'an error'}).`}`);
+  process.exit(1);
+}
 const PUBLIC = path.join(here, 'public');
 // The page's sun reckoning (public/sun.js), also run here so the page comes in its colours. It is written for the page and
 // for CommonJS, and this folder is ES modules, so it is run with a module object of its own.
@@ -91,9 +96,17 @@ const VERSION = JSON.parse(fs.readFileSync(path.join(here, 'package.json'), 'utf
 // A test copy (its own data or transcripts folder) runs from the same folder as the real office, so only the real one updates it.
 const TEST_COPY = !!(process.env.AI_OFFICE_DATA || process.env.AI_OFFICE_TRANSCRIPTS) && process.env.AI_OFFICE_UPDATE_TEST !== '1';
 const notHere = () => (TEST_COPY ? { error: { fault: 'A test copy does not update.', reason: 'It runs from the same folder as your real office.', wayOut: 'Open the real office and use Setup › Update there.' } } : null);
-/** One update step at a time: a second press waits for the first. */
+/** One update step at a time: a second press of the same step waits for the first and shares its answer; a press of
+ * the other step (Check while Update runs) waits for it, then runs on its own. */
 let updating = null;
-const once = (job) => { if (!updating) updating = job().finally(() => { updating = null; }); return updating; };
+let updatingKind = '';
+function once(kind, job) {
+  if (updating && updatingKind === kind) return updating;
+  const p = (updating || Promise.resolve()).catch(() => {}).then(job).finally(() => { if (updating === p) { updating = null; updatingKind = ''; } });
+  updating = p;
+  updatingKind = kind;
+  return p;
+}
 // Restart waits while an update is being taken (a second tab could stop the office half way through it).
 const midUpdate = () => (update.taking() ? { error: { fault: 'The office cannot restart just now.', reason: 'It is taking an update, and stopping half way could leave its folder between two versions.', wayOut: 'Wait a minute for it to finish, then try again.' } } : null);
 
@@ -114,6 +127,7 @@ function shutdown() {
 }
 
 // A folder called __proto__, constructor or prototype would reach the object every map is built on: never kept.
+const badSeat = (res) => fail(res, 400, 'That could not be kept.', 'The seat or the name sent was not one the office can keep (a seat is a small whole number; a name is text).', 'Refresh the page and try again.');
 const badFolder = (res) => fail(res, 400, 'That folder name cannot be kept.', 'The office keeps __proto__, constructor and prototype for itself.', 'Rename the folder, or leave this one without a name or star.');
 
 let lastScanError = '';
@@ -139,7 +153,9 @@ function send(res, code, body, type = 'application/json; charset=utf-8') {
     'content-type': type,
     'cache-control': 'no-store',
     'x-content-type-options': 'nosniff',
-    'content-security-policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'",
+    'content-security-policy': "default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+    'referrer-policy': 'no-referrer',
+    'x-frame-options': 'DENY',
   });
   res.end(data);
 }
@@ -148,6 +164,9 @@ function fail(res, code, fault, reason, wayOut) {
   send(res, code, { error: { fault, reason, wayOut } });
 }
 
+/** A request the office cannot read: answered 400 with this reason, in plain words. */
+function badBody(reason) { const e = new Error(reason); e.plain = true; return e; }
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let size = 0;
@@ -155,11 +174,15 @@ function readBody(req) {
     req.on('data', (c) => {
       size += c.length;
       // Over the limit: the rest is read and dropped, so the page gets an answer (a cut connection would not say why).
-      if (size > 16 * 1024) { parts.length = 0; reject(new Error('The request was too big: over 16 KB.')); return; }
+      if (size > 16 * 1024) { parts.length = 0; reject(badBody('The request was too big: over 16 KB.')); return; }
       parts.push(c);
     });
     req.on('end', () => {
-      try { resolve(JSON.parse(Buffer.concat(parts).toString('utf8') || '{}')); } catch { reject(new Error('not json')); }
+      let b;
+      try { b = JSON.parse(Buffer.concat(parts).toString('utf8') || '{}'); } catch { reject(badBody('It was not JSON.')); return; }
+      // Every route takes a set of named fields: a list, a number, text or null is refused, never read as empty.
+      if (!b || typeof b !== 'object' || Array.isArray(b)) { reject(badBody('It was not a set of named fields.')); return; }
+      resolve(b);
     });
     req.on('error', reject);
   });
@@ -168,10 +191,15 @@ function readBody(req) {
 /** Only this PC may talk to the office: other pages in the browser cannot (no CORS, JSON only, our Host only). */
 function allowed(req) {
   const host = String(req.headers.host || '').toLowerCase();
-  if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) return false;
+  // Port 80 is left out of the Host header by browsers.
+  const hosts = PORT === 80 ? ['127.0.0.1', 'localhost', '127.0.0.1:80', 'localhost:80'] : [`127.0.0.1:${PORT}`, `localhost:${PORT}`];
+  if (!hosts.includes(host)) return false;
   if (req.method === 'POST' && !String(req.headers['content-type'] || '').startsWith('application/json')) return false;
   return true;
 }
+
+/** The office's own API addresses (the routes below). */
+const ROUTES = new Set(['/api/ping', '/api/state', '/api/nickname', '/api/favourite', '/api/edit', '/api/done', '/api/buy', '/api/hook', '/api/setup', '/api/settings', '/api/update/check', '/api/update/pull', '/api/update/restart', '/api/install', '/api/quit', '/api/uninstall']);
 
 const server = http.createServer(async (req, res) => {
   if (!allowed(req)) return fail(res, 403, 'That request was turned away.', 'The office only answers its own page on this PC.', `Open http://127.0.0.1:${PORT}/ instead.`);
@@ -191,37 +219,41 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && url.pathname === '/api/nickname') {
       const b = await readBody(req);
-      if (!safeKey(b.folder)) return badFolder(res);
-      office.setNickname(b.folder ?? '', b.seat, b.nick);
+      if (folderKey(b.folder) === null) return badFolder(res);
+      if (!office.setNickname(b.folder ?? '', b.seat, b.nick)) return badSeat(res);
       return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/favourite') {
       // A star on a person ({ folder, seat, on }) or a whole project ({ folder, project: true, on }); or an old
       // favourite hidden from the Favourites tab and the beach ({ folder, seat, hidden }).
       const b = await readBody(req);
-      if (!safeKey(b.folder)) return badFolder(res);
-      if (typeof b.hidden === 'boolean') office.setFavouriteHidden(b.folder ?? '', b.seat, b.hidden);
-      else if (b.project === true) office.setFavouriteProject(b.folder ?? '', !!b.on);
-      else office.setFavourite(b.folder ?? '', b.seat, !!b.on);
+      if (folderKey(b.folder) === null) return badFolder(res);
+      let done;
+      if (typeof b.hidden === 'boolean') done = office.setFavouriteHidden(b.folder ?? '', b.seat, b.hidden);
+      else if (b.project === true) done = office.setFavouriteProject(b.folder ?? '', !!b.on);
+      else done = office.setFavourite(b.folder ?? '', b.seat, !!b.on);
+      if (!done) return badSeat(res);
       return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/edit') {
       // EDIT on a card: the seat's nickname and look together. look: an object, or null for the made-up look again.
       const b = await readBody(req);
-      if (!safeKey(b.folder)) return badFolder(res);
+      if (folderKey(b.folder) === null) return badFolder(res);
+      if (!seatKey(b.seat)) return badSeat(res);
+      if (b.nick !== undefined && b.nick !== null && typeof b.nick !== 'string') return badSeat(res);
       if (b.look !== undefined && !office.setLook(b.folder ?? '', b.seat, b.look)) return fail(res, 400, 'That look could not be kept.', 'One of its parts is not one the office knows.', 'Pick the parts again in the editor, then save.');
       if (b.nick !== undefined) office.setNickname(b.folder ?? '', b.seat, b.nick);
       return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/done') {
       const b = await readBody(req);
-      if (!office.markDone(String(b.id || ''))) return fail(res, 404, 'That thread could not be taken off the list.', 'The office has no record of it.', 'Refresh the page and try again.');
+      if (typeof b.id !== 'string' || !office.markDone(b.id)) return fail(res, 404, 'That thread could not be taken off the list.', 'The office has no record of it.', 'Refresh the page and try again.');
       return send(res, 200, { ok: true });
     }
     if (req.method === 'POST' && url.pathname === '/api/buy') {
       const b = await readBody(req);
       if (loading) return send(res, 409, { error: { fault: 'The shop opens once every transcript is read.', reason: `The office has read ${loading.done} of ${loading.total} so far, so the spending balance is not counted yet.`, wayOut: 'Try again in a moment.' } });
-      const r = buy(office, String(b.item || ''));
+      const r = buy(office, typeof b.item === 'string' ? b.item : '');
       if (r.error) return send(res, 409, { error: r.error });
       return send(res, 200, r);
     }
@@ -244,7 +276,7 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'POST' && (url.pathname === '/api/update/check' || url.pathname === '/api/update/pull')) {
       // Asks GitHub (only now) what is newer; then takes it (a fast-forward only).
-      const r = notHere() || await once(() => (url.pathname.endsWith('check') ? update.check(here) : update.pull(here)));
+      const r = notHere() || await once(url.pathname.endsWith('check') ? 'check' : 'pull', () => (url.pathname.endsWith('check') ? update.check(here) : update.pull(here)));
       return send(res, r.error ? 409 : 200, r);
     }
     if (req.method === 'POST' && url.pathname === '/api/update/restart') {
@@ -261,6 +293,7 @@ const server = http.createServer(async (req, res) => {
       const b = await readBody(req);
       const want = {};
       for (const k of install.PLACES) if (typeof b[k] === 'boolean') want[k] = b[k];
+      if (!Object.keys(want).length) return fail(res, 400, 'That change was not understood.', 'It named none of the shortcuts.', 'Refresh the page and try again.');
       const r = await install.apply(want);
       if (r.errors.length) return send(res, 409, { error: { fault: 'Not everything could be changed.', reason: `${r.errors.join('; ')}.`, wayOut: 'Try again; if it stays, run install.cmd from the office\'s folder.' }, results: r.results });
       return send(res, 200, { ok: true, results: r.results, status: await install.status() });
@@ -298,9 +331,17 @@ const server = http.createServer(async (req, res) => {
       }
       return send(res, 200, data, TYPES[path.extname(name)] || 'application/octet-stream');
     }
-    return fail(res, 405, 'That cannot be done here.', 'The office does not take that kind of request.', 'Use the office page.');
+    // A known address asked the wrong way: 405. An address the office does not have: 404.
+    const pageFile = url.pathname === '/' || (/^\/[\w.-]+$/.test(url.pathname) && fs.existsSync(path.join(PUBLIC, url.pathname.slice(1))));
+    if (ROUTES.has(url.pathname) || pageFile) return fail(res, 405, 'That cannot be done here.', 'The office does not take that kind of request at this address.', 'Use the office page.');
+    return fail(res, 404, 'Nothing here.', 'That address is not part of the office.', 'Use the office page.');
   } catch (e) {
-    return fail(res, 400, 'That could not be done.', String(e?.message || e), 'Refresh the page and try again.');
+    // A request the office could not read says why; anything else is said in plain words (the details go to the
+    // office's window, never a program's own error text or a folder path to the page).
+    if (e?.plain) return fail(res, 400, 'That request could not be read.', e.message, 'Refresh the page and try again.');
+    console.error('[request]', req.method, url.pathname, e);
+    const saved = /could not be (saved|read)|was not written over/.test(String(e?.message || ''));
+    return fail(res, saved ? 409 : 500, 'That could not be done.', saved ? e.message : 'The office ran into a problem with that request. Nothing else was changed.', 'Refresh the page and try again.');
   }
 });
 
@@ -357,6 +398,7 @@ server.listen(PORT, '127.0.0.1', () => {
 });
 // One request that goes wrong in a way nobody caught must not close the office for every other one: say it and carry on.
 process.on('unhandledRejection', (e) => { console.error('[unhandled]', e); });
+process.on('uncaughtException', (e) => { console.error('[uncaught]', e); });
 // A clean stop (Quit, --stop, Ctrl+C, the window closing) takes the run file with it; a killed process leaves a stale
 // one, which running() sees through.
 process.on('exit', () => { try { if (JSON.parse(fs.readFileSync(RUN_FILE, 'utf8')).pid === process.pid) fs.unlinkSync(RUN_FILE); } catch { /* not ours, or gone */ } });

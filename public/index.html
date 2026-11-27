@@ -26,21 +26,21 @@
   <nav id="projects" class="filter" aria-labelledby="filter-title"></nav>
   <main class="middle">
     <div class="view-tabs" role="tablist" aria-label="How to show the staff">
-      <button type="button" role="tab" id="tab-office" aria-selected="true">Office</button>
-      <button type="button" role="tab" id="tab-list" aria-selected="false">List</button>
-      <button type="button" role="tab" id="tab-favs" aria-selected="false">Favourites</button>
+      <button type="button" role="tab" id="tab-office" aria-selected="true" aria-controls="office-view">Office</button>
+      <button type="button" role="tab" id="tab-list" aria-selected="false" aria-controls="list-view" tabindex="-1">List</button>
+      <button type="button" role="tab" id="tab-favs" aria-selected="false" aria-controls="favs-view" tabindex="-1">Favourites</button>
     </div>
     <div id="view-ticks" class="name-ticks" role="group" aria-label="What the office shows"></div>
-    <section id="office-view" aria-label="The office">
+    <section id="office-view" role="tabpanel" aria-labelledby="tab-office">
       <div id="office"></div>
     </section>
-    <section id="list-view" aria-label="Everyone" hidden></section>
-    <section id="favs-view" aria-label="Favourites" hidden></section>
+    <section id="list-view" role="tabpanel" aria-labelledby="tab-list" hidden></section>
+    <section id="favs-view" role="tabpanel" aria-labelledby="tab-favs" hidden></section>
   </main>
   <aside class="side" id="side">
     <div class="side-tabs" role="tablist" aria-label="Right panel">
       <button type="button" role="tab" id="tab-needs" aria-selected="true" aria-controls="side-needs">Needs attention</button>
-      <button type="button" role="tab" id="tab-rewards" aria-selected="false" aria-controls="side-rewards">Staff rewards</button>
+      <button type="button" role="tab" id="tab-rewards" aria-selected="false" aria-controls="side-rewards" tabindex="-1">Staff rewards</button>
     </div>
     <div id="side-needs" role="tabpanel" aria-labelledby="tab-needs"></div>
     <div id="side-rewards" role="tabpanel" aria-labelledby="tab-rewards" hidden></div>

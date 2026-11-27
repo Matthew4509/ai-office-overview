@@ -4,7 +4,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { readText, writeJson } from './files.mjs';
+import { readText, writeJson, setAside } from './files.mjs';
 
 export const SHOP = [
   { id: 'coffee', name: 'Coffee round', the: 'the coffee round', price: 200_000, keeps: false, most: 0, room: 'treats' },
@@ -54,24 +54,47 @@ export function locksOf(bought) {
 
 function fileOf(office) { return path.join(office.dataDir, 'office.json'); }
 
-/** Purchases as kept, oldest first; unknown items dropped. With { strict }, a file another program holds (an antivirus,
- * EBUSY) throws instead of reading as nothing, so a purchase can never write over what was bought before. */
+/** The purchases last read from each office.json, by its size and time: { sig, list, damaged }. A poll reads the file
+ * only when it has changed, so a damaged one is copied aside once (not on every poll), and while another program holds
+ * it the purchases read before still show. */
+const lastRead = new Map();
+const sigOf = (st) => `${st.size}:${st.mtimeMs}`;
+const cleanList = (list) => list.filter((b) => b && typeof b === 'object' && SHOP.some((i) => i.id === b.item)).map((b) => ({ item: b.item, price: Math.max(0, Math.round(Number(b.price) || 0)), at: String(b.at || '').slice(0, 40) }));
+
+/** Reads office.json now: { list, damaged }. A file that is not JSON, or not { bought: [...] }, is damaged: it is
+ * copied aside (once) so the next purchase cannot wipe what was bought before. Throws when it cannot be read. */
+function readBought(file, tries) {
+  const text = readText(file, tries);
+  let raw;
+  try { raw = JSON.parse(text); } catch { raw = undefined; }
+  if (raw && typeof raw === 'object' && !Array.isArray(raw) && (raw.bought === undefined || Array.isArray(raw.bought))) return { list: cleanList(raw.bought || []), damaged: false };
+  setAside(file, 'could not be read as purchases, and was started empty');
+  return { list: [], damaged: true };
+}
+
+/** Purchases as kept, oldest first; unknown items dropped. A poll reads the file once, never waiting on another program
+ * that holds it (the purchases read before are shown meanwhile). With { strict } (a purchase), the file is read again
+ * now, waited for a moment if held, and a file that still cannot be read throws, so a purchase can never write over
+ * what was bought before. */
 export function boughtOf(office, { strict = false } = {}) {
-  let raw = {};
-  let text = null;
-  try { text = readText(fileOf(office)); } catch (e) {
-    if (e.code !== 'ENOENT' && strict) throw e;
+  const file = fileOf(office);
+  let st;
+  try { st = fs.statSync(file); } catch (e) {
+    if (e.code === 'ENOENT') { lastRead.delete(file); return []; }
+    if (strict) throw e;
+    return lastRead.get(file)?.list || [];
   }
-  if (text !== null) {
-    try { raw = JSON.parse(text.replace(/^\uFEFF/, '')); } catch {
-      raw = {};
-      // There but not JSON: copied aside first, so the next purchase cannot wipe what was bought before.
-      try { fs.copyFileSync(fileOf(office), fileOf(office).replace(/\.json$/, '') + '.damaged-' + new Date().toISOString().replace(/[:.]/g, '-') + '.json'); } catch {}
-    }
+  const had = lastRead.get(file);
+  if (!strict && had && had.sig === sigOf(st)) return had.list;
+  try {
+    const r = readBought(file, strict ? 6 : 1);
+    lastRead.set(file, { sig: sigOf(st), ...r });
+    return r.list;
+  } catch (e) {
+    if (e.code === 'ENOENT') { lastRead.delete(file); return []; }
+    if (strict) throw e;
+    return had?.list || [];
   }
-  if (!raw || typeof raw !== 'object') raw = {};
-  const list = Array.isArray(raw.bought) ? raw.bought : [];
-  return list.filter((b) => b && SHOP.some((i) => i.id === b.item)).map((b) => ({ item: b.item, price: Math.max(0, Math.round(Number(b.price) || 0)), at: String(b.at || '').slice(0, 40) }));
 }
 
 export function purseOf(earned, bought) {
@@ -162,6 +185,8 @@ export function buy(office, item, now = new Date()) {
   const left = purseOf(earned, bought).left;
   if (left < i.price) return no(`Not enough tokens yet for ${i.the}.`, `It costs ${n(i.price)} and the office has ${n(left)} to spend.`, 'Every token Claude writes from now on adds to it: come back after some work.');
   bought.push({ item: i.id, price: i.price, at: now.toISOString() });
-  writeJson(fileOf(office), { bought }, 1);
+  try { writeJson(fileOf(office), { bought }, 1); } catch (e) {
+    return no('The purchase could not be kept.', e.code === 'EKEPT' ? 'office.json could not be read, and a safe copy of it could not be made, so it was not written over. Nothing was bought or spent.' : `office.json could not be saved (${e.code || 'an error'}), so nothing was bought or spent.`, 'Check the disk has room and nothing holds the file, then try again.');
+  }
   return { ok: true, item: i.id, shop: shopOf(office, earned) };
 }

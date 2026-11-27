@@ -117,12 +117,72 @@
     return 'The office did not answer. Check that the AI Office Overview window is still open (or start it again), then try again.';
   };
 
+  // ---- Plain helpers with no page in them (test/page-guards.test.mjs runs them in Node) ----
+
+  /** How long a change (a POST) is waited for: the slow ones (git, the shortcuts) get 2 minutes, the rest 15 seconds. */
+  function postWait(url) {
+    return /^\/api\/(update\/|install|uninstall|setup)/.test(String(url)) ? 120000 : 15000;
+  }
+  /** A change that took too long, said like every other fault: what happened, why, and what to do. */
+  function tookTooLong(ms) {
+    return { error: {
+      fault: 'The office took too long to answer.',
+      reason: `Nothing came back within ${Math.round(ms / 1000)} seconds, so this page stopped waiting.`,
+      wayOut: 'Check that the AI Office Overview window is still open, then look again before pressing it a second time: it may have been done.',
+    } };
+  }
+  /** The tab an arrow key moves to in a strip of `count` tabs (Left, Right, Home, End), or -1 for any other key. */
+  function nextTab(key, index, count) {
+    if (!(count > 0)) return -1;
+    if (key === 'ArrowRight') return (index + 1) % count;
+    if (key === 'ArrowLeft') return (index - 1 + count) % count;
+    if (key === 'Home') return 0;
+    if (key === 'End') return count - 1;
+    return -1;
+  }
+  /** The same look, whatever order its parts were listed in. */
+  function sameLook(a, b) {
+    const flat = (l) => JSON.stringify(Object.keys(l || {}).sort().map((k) => [k, l[k]]));
+    return flat(a) === flat(b);
+  }
+  /**
+   * What EDIT's Save sends: only what was changed in the window. The name only when the box was edited, the look only
+   * when the editor changed it; the office keeps a field that is left out as it is. So a window left open in one tab
+   * cannot put back an old name (or look) that was saved meanwhile from another. Null: nothing changed.
+   */
+  function editChanges({ nickBefore, nickNow, lookBefore, lookNow, lookTouched }) {
+    const out = {};
+    if (String(nickNow ?? '') !== String(nickBefore ?? '')) out.nick = String(nickNow ?? '');
+    if (lookTouched && lookNow && !sameLook(lookNow, lookBefore)) out.look = lookNow;
+    return Object.keys(out).length ? out : null;
+  }
+
+  // ---- End of the plain helpers ----
+
+  app.nextTab = nextTab;
+
   // Every request carries the key this page was served with.
   const KEY = document.querySelector('meta[name="ai-office-key"]')?.content || '';
   async function api(url, body) {
     const headers = { 'x-ai-office-key': KEY };
     // A read gives up after 20 seconds: one that never ends would hold up every ask after it (one at a time).
-    const r = await fetch(url, body === undefined ? { cache: 'no-store', headers, signal: AbortSignal.timeout?.(20000) } : { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body) });
+    if (body === undefined) return answerOf(await fetch(url, { cache: 'no-store', headers, signal: AbortSignal.timeout?.(20000) }));
+    // A change gives up too, so its button is never greyed for good: after 15 seconds, or 2 minutes for the slow ones.
+    const wait = postWait(url);
+    const stop = new AbortController();
+    const timer = setTimeout(() => stop.abort(), wait);
+    let r;
+    try {
+      r = await fetch(url, { method: 'POST', headers: { ...headers, 'content-type': 'application/json' }, body: JSON.stringify(body), signal: stop.signal });
+    } catch (e) {
+      if (stop.signal.aborted) throw tookTooLong(wait);
+      throw e;
+    } finally {
+      clearTimeout(timer);
+    }
+    return answerOf(r);
+  }
+  async function answerOf(r) {
     // A key from an earlier run: the office was started again, so this page is reloaded to get the new one.
     if (r.status === 403) { setTimeout(() => location.reload(), 500); throw { error: { fault: 'The office was restarted.', reason: 'This page is from its earlier run.', wayOut: 'It reloads by itself.' } }; }
     const d = await r.json().catch(() => ({}));
@@ -130,6 +190,7 @@
     return d;
   }
   app.api = api;
+  app.postWait = postWait;
 
   /** The Thoughts chat (Setup): 'all' (work lines and the office chat), 'work' (what the threads do, and plain facts) or
    * 'off'. Kept in this browser. */
@@ -215,6 +276,7 @@
     return el('li', {}, el('button', {
       type: 'button',
       class: 'person',
+      'data-person': p.key,
       'aria-current': String(app.picked === p.key),
       onclick: () => pick(p.key),
     },
@@ -317,7 +379,7 @@
   function drawWaiting() {
     const pane = document.getElementById('side-needs');
     const list = waitingList();
-    const items = list.map((w) => el('li', {}, el('button', { type: 'button', class: 'wait', onclick: () => pick(w.person) },
+    const items = list.map((w) => el('li', {}, el('button', { type: 'button', class: 'wait', 'data-person': w.person, onclick: () => pick(w.person) },
       el('b', { text: `${w.name} · ${projectName(w.folder)}` }),
       el('span', { class: 'meta', text: `${w.gone ? 'Gone home, still waiting · ' : ''}asked ${ago(w.since)} · ${w.title}` }),
       el('q', { text: w.asked }))));
@@ -372,7 +434,7 @@
     const nowSaid = document.getElementById('card-said');
     if (nowSaid && nowSaid.textContent !== doing) nowSaid.textContent = doing;
     swap(head, back,
-      el('div', { class: 'card-title' }, face(p, 48), el('div', { class: 'card-name' }, el('h2', { class: 'name-heading' }, p.name, personStar(p)), el('p', { class: 'sub', text: where(p) + (p.nick ? ` · first called ${defaultName(p)}` : '') })), edit),
+      el('div', { class: 'card-title' }, face(p, 48), el('div', { class: 'card-name' }, el('h2', { class: 'name-heading', tabindex: '-1' }, p.name, personStar(p)), el('p', { class: 'sub', text: where(p) + (p.nick ? ` · first called ${defaultName(p)}` : '') })), edit),
       favRow(p), openRow(p), asked, doneBtn);
     // Their newest thread's last messages, in the order they were said (also once they have gone home).
     const r = p.recent;
@@ -428,11 +490,13 @@
   function editPerson(p) {
     const sheet = document.getElementById('edit');
     const L = window.officeLook;
-    let look = { ...L.lookOf(p.key, p.look) };
-    let madeUp = !p.look;
+    const lookBefore = { ...L.lookOf(p.key, p.look) };
+    let look = { ...lookBefore };
+    let lookTouched = false;
+    const nickBefore = p.nick || '';
     const said = el('p', { class: 'note', 'aria-live': 'polite' });
     const input = el('input', { type: 'text', maxlength: '40', value: p.nick || '', placeholder: defaultName(p), 'aria-label': 'Name' });
-    const editor = L.editor({ look, onChange: (l) => { look = l; madeUp = false; } });
+    const editor = L.editor({ look, onChange: (l) => { look = l; lookTouched = true; } });
     const close = () => { sheet.hidden = true; sheet.replaceChildren(); };
     // Saved: the card is drawn again with the new name, so its EDIT button is a new one; the focus goes back to it.
     const backToCard = () => {
@@ -441,8 +505,11 @@
     };
     const save = async (e) => {
       e.preventDefault();
+      const changed = editChanges({ nickBefore, nickNow: input.value, lookBefore, lookNow: look, lookTouched });
+      // Nothing changed: nothing is sent, so nothing saved meanwhile from another tab is put back.
+      if (!changed) { close(); backToCard(); return; }
       try {
-        await api('/api/edit', { folder: p.folder, seat: p.seat, nick: input.value, ...(madeUp ? {} : { look }) });
+        await api('/api/edit', { folder: p.folder, seat: p.seat, ...changed });
         close();
         await refresh();
         backToCard();
@@ -451,13 +518,14 @@
         said.textContent = f.fault ? `${f.fault} ${f.reason || ''} ${f.wayOut || ''}` : 'The office did not answer: nothing was saved. Check that AI Office Overview is still running, then try again.';
       }
     };
-    // The made-up look again, and the name as typed in the box (kept too, as Save would).
+    // The made-up look again, and the name as typed in the box if it was edited (kept too, as Save would).
     const resetLook = p.look ? el('button', {
       type: 'button',
       class: 'btn',
       onclick: async () => {
         try {
-          await api('/api/edit', { folder: p.folder, seat: p.seat, nick: input.value, look: null });
+          const nick = editChanges({ nickBefore, nickNow: input.value })?.nick;
+          await api('/api/edit', { folder: p.folder, seat: p.seat, look: null, ...(nick === undefined ? {} : { nick }) });
           close();
           await refresh();
           backToCard();
@@ -478,11 +546,34 @@
     input.focus();
   }
 
+  // A card opened from the keyboard takes the focus (its name), so the next Tab goes on into the card, not back to the
+  // top of the page; closed again (Back), the focus goes back to that person's tile, or the tab of the view shown.
+  let cardFrom = null;
   function pick(key) {
+    const before = app.picked;
+    const side = document.getElementById('side-card');
+    const active = document.activeElement;
+    const inCard = !!active && side.contains(active);
+    // Opened by a key (the focus ring is showing), the page may scroll to the card; by a click it stays where it is.
+    const byKey = !!active && active !== document.body && !inCard && !!active.matches?.(':focus-visible');
+    if (key && !inCard) cardFrom = { node: active, key, region: active?.closest?.('#list-view, #favs-view, #side-needs')?.id };
     app.picked = key;
     app.editing = false;
     draw();
     window.officeView?.select?.(key);
+    if (key && app.picked === key) {
+      const heading = side.querySelector('.name-heading');
+      heading?.focus({ preventScroll: !byKey && !inCard });
+    } else if (!key && before && (inCard || active === document.body || !active?.isConnected)) {
+      const shown = (n) => n?.isConnected && n.offsetParent !== null;
+      const was = cardFrom;
+      cardFrom = null;
+      const tiles = [...document.querySelectorAll('[data-person]')].filter((n) => n.dataset.person === before && shown(n));
+      const tile = tiles.find((n) => was?.region && n.closest(`#${was.region}`)) || tiles[0];
+      const to = (shown(was?.node) && was.node !== document.body ? was.node : null) || tile
+        || document.querySelector(`.view-tabs [role="tab"][aria-selected="true"]`);
+      to?.focus();
+    }
   }
   app.pick = pick;
 
@@ -494,6 +585,15 @@
     b.textContent = `Spending balance ${tokens(shop.purse.left)}`;
     b.title = 'Tokens the AI has written since the office opened, less what was spent: open Staff rewards to spend them';
   }
+  /** Something was bought: the header's balance says what is left at once (from the shop's answer), and the office is
+   * asked again now rather than at the next 3-second ask. */
+  app.shopBought = (shop) => {
+    if (app.data && shop?.purse) {
+      app.data.shop = shop;
+      drawPurse();
+    }
+    refresh();
+  };
 
   function draw() {
     if (!app.data) return;
@@ -640,6 +740,38 @@
     }
   });
 
+  /** Tabs (role="tab"): the chosen one is the only one in the Tab order, the others are reached with the arrow keys
+   * (Left, Right, Home, End), which also choose the tab they land on. Every strip on the page works this way, Setup's
+   * too (drawn again by setup.js on each tab: it is set up again each time the window's contents change). */
+  function roving(list) {
+    const all = [...list.querySelectorAll('[role="tab"]')];
+    const on = all.find((t) => t.getAttribute('aria-selected') === 'true' && !t.hidden) || all.find((t) => !t.hidden);
+    for (const t of all) {
+      const want = t === on ? 0 : -1;
+      if (t.tabIndex !== want) t.tabIndex = want;
+    }
+  }
+  app.roving = roving;
+  for (const list of document.querySelectorAll('[role="tablist"]')) {
+    roving(list);
+    new MutationObserver(() => roving(list)).observe(list, { attributes: true, attributeFilter: ['aria-selected', 'hidden'], subtree: true, childList: true });
+  }
+  {
+    const setupSheet = document.getElementById('setup');
+    const again = () => { for (const list of setupSheet.querySelectorAll('[role="tablist"]')) roving(list); };
+    if (setupSheet) new MutationObserver(again).observe(setupSheet, { childList: true, subtree: true, attributes: true, attributeFilter: ['aria-selected'] });
+  }
+  document.addEventListener('keydown', (e) => {
+    const t = e.target;
+    if (t?.getAttribute?.('role') !== 'tab' || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    const tabs = [...(t.closest('[role="tablist"]')?.querySelectorAll('[role="tab"]') || [])].filter((x) => !x.hidden && !x.disabled);
+    const to = nextTab(e.key, tabs.indexOf(t), tabs.length);
+    if (to < 0 || !tabs[to]) return;
+    e.preventDefault();
+    tabs[to].focus();
+    tabs[to].click();
+  });
+
   // A window of the office's own (the arcade machine, the vending machine): a title, what is in it, its buttons at
   // the foot. A click beside it closes it, like Escape.
   const win = document.getElementById('check');
@@ -709,7 +841,8 @@
     }).observe(sheet, { attributes: true, attributeFilter: ['hidden'], childList: true });
     sheet.addEventListener('keydown', (e) => {
       if (e.key !== 'Tab') return;
-      const items = [...sheet.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null);
+      // Only what Tab itself stops on: a tab that is not chosen (tabindex -1, reached by the arrow keys) is not an end.
+      const items = [...sheet.querySelectorAll(FOCUSABLE)].filter((n) => n.offsetParent !== null && n.tabIndex >= 0);
       if (!items.length) return;
       const first = items[0], last = items[items.length - 1];
       if (!sheet.contains(document.activeElement)) { e.preventDefault(); first.focus(); }

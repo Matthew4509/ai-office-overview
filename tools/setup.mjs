@@ -37,7 +37,10 @@ function report(r) {
     const name = install.NAMES[x.where];
     if (x.error) say(`  x ${name}: ${x.error}`);
     else if (x.unsupported) say(`  - ${name}: ${x.unsupported}`);
-    else if (x.where === 'hooks') say(`  OK ${name}${x.removed ? ` taken out of Claude's settings (a copy is kept: ${x.backup})` : ': none were set up'}`);
+    else if (x.where === 'hooks') {
+      say(`  OK ${name}${x.removed ? ` taken out of Claude's settings (a copy is kept: ${x.backup})` : ': none were set up for this folder'}`);
+      if (x.others) say(`  - ${name} of another copy of the office (another folder) are left in Claude's settings.`);
+    } else if (x.kept) say(`  - ${name} left alone: it ${x.owner ? `starts the copy of the office in ${x.owner}` : 'is not this office\'s'} (${x.path})`);
     else say(`  ${x.exists ? `OK ${name}${x.path ? ` (${x.path})` : ''}` : `OK ${name} removed`}`);
   }
 }

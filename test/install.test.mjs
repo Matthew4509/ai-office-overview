@@ -16,6 +16,8 @@ import { withOurs } from '../src/setup.mjs';
 const onWindows = process.platform === 'win32';
 const TOOL = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'tools', 'setup.mjs');
 const lnk = (dir, where) => path.join(dir, where, 'AI Office Overview.lnk');
+// This folder's hook.mjs as advanced setup writes it: uninstall takes only hooks that run this folder's (INS-02).
+const OUR_HOOK = path.join(install.HERE, 'hook.mjs').replace(/\\/g, '/');
 const BEEPS = { model: 'opus', hooks: { Stop: [{ hooks: [{ type: 'command', command: '[console]::beep(659,90)', shell: 'powershell', timeout: 5 }] }] } };
 
 function scratch() {
@@ -52,10 +54,15 @@ test('shortcuts: each place is made, points here, and is taken away again (Windo
       assert.equal(path.resolve(r.path), path.resolve(lnk(s.sc, where)));
       assert.ok(fs.existsSync(lnk(s.sc, where)));
     }
-    // What the shortcut runs: the start file in this folder, and "quiet" only for Start with Windows.
-    const read = (where) => spawnSync('powershell', ['-NoProfile', '-Command', `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${lnk(s.sc, where)}'); $s.TargetPath + '|' + $s.Arguments + '|' + $s.WindowStyle`], { encoding: 'utf8' }).stdout.trim();
-    assert.equal(read('desktop'), `${path.join(install.HERE, 'Start AI Office Overview.cmd')}||7`);
-    assert.equal(read('startup'), `${path.join(install.HERE, 'Start AI Office Overview.cmd')}|quiet|7`);
+    // What the shortcut runs: cmd.exe, which changes to this folder and starts the start file there (so a folder named
+    // with %...% is not read as a variable), and "quiet" only for Start with Windows.
+    const read = (where) => spawnSync('powershell', ['-NoProfile', '-Command', `$s=(New-Object -ComObject WScript.Shell).CreateShortcut('${lnk(s.sc, where)}'); $s.TargetPath + '|' + $s.Arguments + '|' + $s.WorkingDirectory + '|' + $s.WindowStyle`], { encoding: 'utf8' }).stdout.trim().split('|');
+    const [target, args, wd, style] = read('desktop');
+    assert.match(target, /\\cmd\.exe$/i);
+    assert.match(args, /^\/d \/c cd \/d .+ && "\.\\Start AI Office Overview\.cmd"$/);
+    assert.equal(wd, install.HERE);
+    assert.equal(style, '7');
+    assert.match(read('startup')[1], /"\.\\Start AI Office Overview\.cmd" quiet$/);
     const left = await install.apply({ desktop: false });
     assert.deepEqual(left.errors, []);
     assert.ok(!fs.existsSync(lnk(s.sc, 'desktop')), 'the desktop one is gone');
@@ -70,8 +77,8 @@ test('uninstall: every shortcut away, and only this office\'s hooks out of a cop
   const s = scratch();
   try {
     if (onWindows) await install.apply({ startmenu: true, desktop: true, startup: true });
-    const withBoth = withOurs(BEEPS, 'node "C:/x/ai office overview/hook.mjs" 8860 --ai-office-overview-hook');
-    withBoth.hooks.Stop.push({ hooks: [{ type: 'command', command: 'node "C:/old/claude office/hook.mjs" 8860 --claude-office-hook', timeout: 3 }] });
+    const withBoth = withOurs(BEEPS, `node "${OUR_HOOK}" 8860 --ai-office-overview-hook`);
+    withBoth.hooks.Stop.push({ hooks: [{ type: 'command', command: `node "${OUR_HOOK}" 8860 --claude-office-hook`, timeout: 3 }] });
     withBoth.hooks.Stop.push({ hooks: [{ type: 'command', command: 'node "C:/other/office/hook.mjs" 8880 --ai-head-office-hook', timeout: 3 }] });
     fs.writeFileSync(s.settings, JSON.stringify(withBoth, null, 2));
     const r = await install.uninstall();
@@ -105,7 +112,7 @@ test('removeHooks: a settings file that is not JSON is left alone, with a plain 
 test('removeHooks: a settings file saved with a byte-order mark (Notepad, PowerShell 5) is read, and only our hook goes', () => {
   const s = scratch();
   try {
-    const ours = { hooks: [{ type: 'command', command: 'node "C:/x/office/hook.mjs" 8860 --ai-office-overview-hook', timeout: 3 }] };
+    const ours = { hooks: [{ type: 'command', command: `node "${OUR_HOOK}" 8860 --ai-office-overview-hook`, timeout: 3 }] };
     fs.writeFileSync(s.settings, '\uFEFF' + JSON.stringify({ hooks: { Stop: [BEEPS.hooks.Stop[0], ours] } }, null, 2));
     const r = install.removeHooks();
     assert.equal(r.error, undefined, 'no "not valid JSON"');

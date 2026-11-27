@@ -3,7 +3,7 @@ rem AI Office Overview setup. Double-click it once (or again any time: it only s
 rem   1. Checks Node.js 20 or newer is installed; if not, offers to install the LTS version with winget (Windows'
 rem      own installer, it asks before it changes anything), or points to nodejs.org.
 rem   2. Puts the office in the Start menu, then asks about a desktop shortcut and Start with Windows (all for this
-rem      Windows user only, no administrator needed): node tools\setup.mjs install.
+rem      Windows user only, no administrator needed), with tools\setup.mjs install.
 rem   3. Starts the office and opens its page.
 rem uninstall.cmd undoes step 2. Setup > Setup does step 2 from inside the office.
 setlocal
@@ -22,14 +22,20 @@ if %NODE_MAJOR% LSS 20 goto :old_node
 for /f "delims=" %%v in ('node -v') do echo  Node.js %%v found. Good.
 echo.
 node tools\setup.mjs install %*
+rem setup.mjs ends with 1 when something could not be set up: this file ends with 1 too (after the pause, so the
+rem message can be read), and does not start the office.
 if errorlevel 1 (
   echo.
   pause
+  exit /b 1
 )
+if not errorlevel 0 exit /b 1
 if /i "%AI_OFFICE_INSTALL_NO_START%"=="1" exit /b 0
 echo.
 echo  Starting the office...
-start "" "%~dp0Start AI Office Overview.cmd"
+rem The start file by its name in this folder (the window is already here): a folder path given to start would go
+rem through cmd once more, which reads a %NAME% in it as a variable.
+start "" ".\Start AI Office Overview.cmd"
 exit /b 0
 
 :old_node

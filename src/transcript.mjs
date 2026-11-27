@@ -14,6 +14,11 @@ const LOOKERS = new Set(['cd', 'ls', 'dir', 'cat', 'type', 'head', 'tail', 'grep
   'pwd', 'sort', 'uniq', 'cut', 'tr', 'which', 'where', 'du', 'df', 'stat', 'file', 'less', 'more', 'true',
   'get-content', 'get-childitem', 'select-string', 'test-path', 'get-item', 'measure-object', 'select-object',
   'where-object', 'format-table', 'write-output', 'get-location', 'gc', 'gci', 'sls']);
+/** At most this many files written, and files counted for edits, are kept per thread (as in AI Head Office Overview). */
+const MAX_WROTE = 200;
+const MAX_EDITS = 500;
+/** A line longer than this with no end yet is passed over, not read again from its start on every change. */
+const MAX_LINE = 16 * 1024 * 1024;
 const GIT_LOOKS = new Set(['status', 'log', 'diff', 'show', 'branch', 'ls-files', 'rev-parse', 'remote', 'blame', 'describe']);
 
 /** A fresh summary for a transcript file. */
@@ -110,6 +115,8 @@ export function onlyLooks(cmd) {
     const first = (words[0] || '').toLowerCase().replace(/^["']|["']$/g, '');
     if (first === '[' || first === 'test') return true;
     if (first === 'git') return GIT_LOOKS.has((words[1] || '').toLowerCase());
+    // find that deletes or runs something is work.
+    if (first === 'find' && words.some((w) => /^-(delete|exec|execdir|ok|okdir|fprint|fprintf|fls)$/.test(w))) return false;
     if (first === 'sed') return words.includes('-n') && !words.some((w) => w.startsWith('-i'));
     return LOOKERS.has(first);
   });
@@ -284,13 +291,15 @@ export function addLine(t, l) {
         if (ids.length > 20) delete t.pending[ids[0]];
       }
       if (WRITERS.has(b.name)) {
-        const p = input.file_path || input.notebook_path;
+        const p = [input.file_path, input.notebook_path].find((v) => typeof v === 'string' && v) || '';
         if (p) {
           t.edits = t.edits || {};
           const n = (t.edits[p] = (Object.hasOwn(t.edits, p) ? Number(t.edits[p]) || 0 : 0) + 1);
+          const keys = Object.keys(t.edits);
+          if (keys.length > MAX_EDITS) for (const k of keys.slice(0, keys.length - MAX_EDITS)) delete t.edits[k];
           if ([3, 6, 10].includes(n)) eventAt(t, at, 'again', { file: String(p).split(/[\\/]/).pop().slice(0, 60), n });
         }
-        if (p && !t.wrote.includes(p)) t.wrote.push(p);
+        if (p && !t.wrote.includes(p)) { t.wrote.push(p); if (t.wrote.length > MAX_WROTE) t.wrote.splice(0, t.wrote.length - MAX_WROTE); }
         t.worked = true;
       } else if (SHELLS.has(b.name) && input.command && !onlyLooks(input.command)) {
         t.ran.push({ cmd: String(input.command).slice(0, 300), cwd: commandFolder(input.command, typeof l.cwd === 'string' ? l.cwd : t.cwd) });
@@ -340,7 +349,8 @@ export function stillAfterLineEnd(file, offset) {
 
 export function readFrom(file, t, offset = 0, also = null) {
   let fd;
-  try { fd = fs.openSync(file, 'r'); } catch { return offset; }
+  // Not opened (another program holds it, or it is gone): -1, and nothing was read, so the caller tries again later.
+  try { fd = fs.openSync(file, 'r'); } catch { return -1; }
   try {
     const size = fs.fstatSync(fd).size;
     if (size < offset) offset = 0; // the file was replaced: read it again from the start
@@ -348,6 +358,7 @@ export function readFrom(file, t, offset = 0, also = null) {
     const CHUNK = 4 * 1024 * 1024;
     let pos = Math.min(offset, alsoFrom);
     let carry = Buffer.alloc(0);
+    let skipping = false; // inside a line longer than MAX_LINE: the rest of it, up to its end, is passed over
     while (pos < size) {
       const buf = Buffer.alloc(Math.min(CHUNK, size - pos));
       const n = fs.readSync(fd, buf, 0, buf.length, pos);
@@ -360,8 +371,9 @@ export function readFrom(file, t, offset = 0, also = null) {
       for (let i = carry.length; i < data.length; i++) {
         if (data[i] !== 10) continue;
         const at = base + start;
-        const line = data.toString('utf8', start, i).trim();
+        const line = skipping ? '' : data.toString('utf8', start, i).trim();
         start = i + 1;
+        skipping = false;
         if (!line) continue;
         const mine = at >= offset, theirs = at >= alsoFrom;
         if (!mine && !theirs) continue;
@@ -372,6 +384,7 @@ export function readFrom(file, t, offset = 0, also = null) {
         } catch { /* a damaged line is skipped */ }
       }
       carry = Buffer.from(data.subarray(start));
+      if (carry.length > MAX_LINE) { carry = Buffer.alloc(0); skipping = true; }
     }
     return pos - carry.length;
   } finally {

@@ -312,9 +312,10 @@ test('project folders named constructor or toString are just names: the snapshot
     // (Folders that are not on disk are named in lower case, as always.)
     assert.deepEqual(s.projects.map((p) => p.folder).sort(), ['constructor', 'hasownproperty', 'tostring']);
     assert.equal(s.people.length, 3);
-    // A name or star on one is refused (it would reach every object), and nothing else breaks.
-    assert.equal(office.setNickname('toString', 1, 'Pat'), false);
-    assert.equal(office.setNickname('tostring', 1, 'Pat'), true, 'the lower-case name is not one of Object\'s');
+    // A name or star on one is kept as that folder's own (never on the object every record is built on).
+    assert.equal(office.setNickname('toString', 1, 'Pat'), true);
+    assert.equal(Object.hasOwn(office.seatNames, 'toString') && office.seatNames.toString['1'].nick, 'Pat');
+    assert.equal(office.setNickname('constructor', 1, 'Pat'), false, 'constructor and __proto__ are still refused');
     assert.equal(({}).toString, Object.prototype.toString);
   } finally {
     h.done();
@@ -349,6 +350,7 @@ test('hook events: a burst of made-up ids keeps at most 2000, the newest', () =>
   try {
     const { office, setNow } = setup(h, 0);
     for (let i = 0; i < 2100; i++) { setNow(i / 1000); office.hook(`id-${i}`, 'working', 'Reading your message'); }
+    office.save(); // hooks.json is written at most once a second: the save writes the rest
     const kept = JSON.parse(fs.readFileSync(path.join(h.data, 'hooks.json'), 'utf8'));
     assert.equal(Object.keys(kept).length, 2000);
     assert.ok(kept['id-2099'] && !kept['id-0'], 'the oldest went first');

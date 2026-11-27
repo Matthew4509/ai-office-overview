@@ -236,7 +236,8 @@ test('a nickname and the stars (a person, a whole project, hidden) are kept in t
     assert.equal((await call(o.port, 'POST', '/api/favourite', { key, body: { folder: 'proj', project: true, on: false } })).status, 200);
     assert.deepEqual((await state()).favProjects, []);
 
-    for (const folder of ['__proto__', 'constructor', 'toString']) {
+    // __proto__ and constructor would reach the object every record is built on: refused. toString and the like are just names.
+    for (const folder of ['__proto__', 'constructor']) {
       for (const [at, body] of [['/api/nickname', { folder, seat: 1, nick: 'Sneaky' }], ['/api/favourite', { folder, seat: 1, on: true }], ['/api/favourite', { folder, project: true, on: true }]]) {
         const r = await call(o.port, 'POST', at, { key, body });
         assert.equal(r.status, 400, `${at} ${JSON.stringify(body)}`);
@@ -244,6 +245,7 @@ test('a nickname and the stars (a person, a whole project, hidden) are kept in t
       }
     }
     assert.deepEqual((await state()).favProjects, [], 'no odd project kept');
+    assert.equal((await call(o.port, 'POST', '/api/nickname', { key, body: { folder: 'toString', seat: 1, nick: 'Tess' } })).status, 200, 'a folder called toString can have a nickname');
     assert.ok(o.alive());
   } finally {
     await o.done();

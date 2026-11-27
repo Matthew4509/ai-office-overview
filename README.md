@@ -32,7 +32,8 @@ Three ways, each for your Windows user only (no administrator needed):
   zip): it checks Node.js 20 or newer (and offers to install it with winget), puts the office in the Start menu, asks
   about a desktop shortcut and Start with Windows, and starts the office. Setup › Setup in the office does the
   shortcuts too. **uninstall.cmd** undoes it (so does Setup › About › Uninstall): the office stops, the shortcuts go and
-  the hooks come out; the folder stays for you to delete. A copy made with `git clone` updates itself from Setup ›
+  the hooks come out; the folder stays for you to delete. Each copy (a clone, a zip, the installed one) takes away
+  only its own shortcuts and hooks: another copy's are left, and a shortcut that starts another copy is not taken over. A copy made with `git clone` updates itself from Setup ›
   Update; a zip does not (download the newer zip and copy your data folder across).
 - **Nothing at all**: with Node.js 20 or newer, double-click **Start AI Office Overview.cmd**, or run `node server.mjs`.
 
@@ -177,8 +178,11 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
   `node tools/make-icon.mjs`).
 - `hook.mjs`: the advanced-setup hook.
 - `install.cmd`, `uninstall.cmd` and `tools/setup.mjs`: the shortcuts, set up and taken away from the console.
-- `installer/`: the Windows installer. `installer\build.cmd` stages the files with this PC's Node.js and builds
-  `installer\out\AI-Office-Overview-Setup-<version>.exe` with Inno Setup 6 (`winget install --id JRSoftware.InnoSetup -e`).
+- `installer/`: the Windows installer. `installer\build.cmd` stages the files with this PC's Node.js and its licence (the one beside
+  node.exe, or else `installer\node-LICENSE`, a local copy kept out of git; with neither it stops and says where to get
+  it), and builds `installer\out\AI-Office-Overview-Setup-<version>.exe` with Inno Setup 6
+  (`winget install --id JRSoftware.InnoSetup -e`). The installer refuses a folder whose path holds `$`, `%`, a backtick
+  or `"`.
 - `AGENTS.md` (and `CLAUDE.md`, which points Claude Code to it): how an agent helps set up hooks safely.
 - `data/` (made on first start, not shipped): settings, nicknames, the ledger, purchases, and where each transcript was
   read to.
@@ -209,3 +213,6 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 ## Licence
 
 The office drawing and the staff looks come from TOMLIN (PolyForm Noncommercial 1.0.0), by the same owner.
+
+The installer brings a copy of [Node.js](https://nodejs.org) (MIT licence) in `node\node.exe`. Its licence, which also
+covers the libraries built into it (OpenSSL, ICU, V8, libuv and others), is beside it in `node\LICENSE`.

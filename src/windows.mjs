@@ -37,7 +37,8 @@ const firstLine = (s) => (s || '').trim().split(/\r?\n/)[0];
 export const SHORTCUT_PLACES = { startmenu: 'Start menu shortcut', desktop: 'Desktop shortcut', startup: 'Start with Windows' };
 
 /** A shortcut (status, create or remove) in one of the places above. `folder`: tests only, instead of the real place.
- * The answer is { where, path, exists, here } (here: it points at this office's folder) or { where, error }. */
+ * The answer is { where, path, exists, here } (here: it points at this office's folder) or { where, error }; owner: the
+ * folder of the copy a shortcut of the same name starts instead, and kept: remove left it, as it is not this folder's. */
 export async function shortcut(where, action, folder) {
   const args = ['-Where', where, '-Action', action];
   if (folder) { fs.mkdirSync(folder, { recursive: true }); args.push('-Folder', folder); }

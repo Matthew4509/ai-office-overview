@@ -9,8 +9,9 @@
 //   node tools/head-office-check.mjs --show public/banter.js     every difference in one file, with line numbers
 //   node tools/head-office-check.mjs --accept [file]             write today's differences into the list (after sorting)
 //
-// The folder: the path given, else HEAD_OFFICE, else ../ai head office overview/office beside this app. Exit code 0 when
-// everything left is on the list, 1 when something changed since the list was written, 2 when it cannot run.
+// The folder: the path given, else HEAD_OFFICE, else ../ai head office overview/office beside this app, or
+// ../../ai head office overview/office. Exit code 0 when everything left is on the list, 1 when something changed
+// since the list was written, 2 when it cannot run.
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -26,7 +27,11 @@ const flag = (name) => {
 };
 const show = flag('--show');
 const accept = flag('--accept');
-const head = path.resolve(args[0] || process.env.HEAD_OFFICE || path.join(app, '..', 'ai head office overview', 'office'));
+// Without a path: Head Office's office folder beside this app's folder, or one level further up (this app's clone sits
+// in a folder of its own next to Head Office's: <projects>/claude office/ai office overview and
+// <projects>/ai head office overview). The first one that is there is used.
+const besides = [path.join(app, '..', 'ai head office overview', 'office'), path.join(app, '..', '..', 'ai head office overview', 'office')];
+const head = path.resolve(args[0] || process.env.HEAD_OFFICE || besides.find((d) => fs.existsSync(path.join(d, 'public', 'office.js'))) || besides[0]);
 
 const fail = (fault, reason, wayOut) => {
   console.error(`${fault}\n${reason}\n${wayOut}`);

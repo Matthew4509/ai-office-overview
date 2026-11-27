@@ -166,7 +166,7 @@
     said2(el('p', { text: 'Taking the update…' }));
     try {
       const r = await app.api('/api/update/pull', {});
-      said2(el('p', { text: `Updated${r.newVersion ? ` to ${r.newVersion}` : ''}: ${plural(r.took, 'change', 'changes')} taken (${r.from} to ${r.to}).` }));
+      said2(el('p', { text: `Updated${r.newVersion ? ` to ${r.newVersion}` : ''}: ${plural(r.took, 'change', 'changes')} taken (${r.from} to ${r.to}).` }), ...(r.back ? [el('p', { class: 'note', text: r.back })] : []));
       // A refused restart (another tab is taking an update) says so, rather than waiting for a restart that never comes.
       try { await app.api('/api/update/restart', {}); } catch (e) { if (e?.error) return said2(el('p', { text: fault(e) }), el('div', { class: 'row' }, btn('Check again', check))); }
       backAgain();
@@ -228,7 +228,7 @@
     let s = null;
     try { s = await app.api('/api/install'); } catch { /* the folder is then left out */ }
     return [
-      row(`AI Office Overview ${app.data?.version || ''}`, `Runs only on this PC (127.0.0.1:${location.port || '8860'}). PolyForm Noncommercial License 1.0.0.${s ? ` Node.js ${s.node.version}${s.bundledNode ? ', the installer\'s own copy' : ''}. Folder: ${s.folder}.` : ''}`),
+      row(`AI Office Overview ${app.data?.version || ''}`, `Runs only on this PC (127.0.0.1:${location.port || '8860'}). PolyForm Noncommercial License 1.0.0.${s ? ` Runs on Node.js ${s.node.version} (nodejs.org, MIT licence${s.bundledNode ? '; the installer\'s own copy, its licence in node\\LICENSE' : ''}). Folder: ${s.folder}.` : ''}`),
       row('Quit the office', 'Stops the office. Start it again with Start AI Office Overview.cmd or a shortcut.', btn('Quit', async () => {
         if (!confirm('Quit the office? It stops; this page then has nothing to show.')) return;
         try { await app.api('/api/quit', {}); } catch (e) { if (e?.error?.fault) return say(fault(e)); /* else it is stopping */ }

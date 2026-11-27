@@ -9,15 +9,36 @@ import { emptyThread, readFrom, localDay, stillAfterLineEnd } from './transcript
 import { folderOf, stateOf, assignSeats, defaultName, projectOf, normPath } from './people.mjs';
 import { cleanLook } from './look.mjs';
 import { AppLinks } from './applinks.mjs';
-import { writeJson, readText } from './files.mjs';
+import { writeJson, readText, setAside, isKept, keptError } from './files.mjs';
+import { oneLine } from './text.mjs';
+import { boughtOf } from './shop.mjs';
+
+/** How far ahead of this PC's clock a time may be before it is taken as written while a clock ran fast. */
+const AHEAD_MS = 5 * 60_000;
 
 
 /** How long a finished thread on the Needs attention list stays there. */
 const WAITING_DAYS = 7;
-/** Names that would reach Object.prototype if used as a key in the office's plain-object records (seats, hooks, done):
- * a folder or thread called one of these (or toString, valueOf, hasOwnProperty and the rest) is refused. */
+/** Names that would reach Object.prototype if used as a key in the office's plain-object records (seats, hooks, done,
+ * the ledger): a folder or thread called one of these is refused. Every other name (toString, valueOf...) is looked up
+ * as the record's own key only, so it is safe to keep. */
 const UNSAFE_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
-export const safeKey = (k) => { const s = String(k); return !UNSAFE_KEYS.has(s) && !(s in Object.prototype); };
+export const safeKey = (k) => !UNSAFE_KEYS.has(String(k));
+/** A record's own value for a key, never one every object has (toString, valueOf...). */
+const own = (o, k) => (o && Object.hasOwn(o, k) ? o[k] : undefined);
+/** A seat number as the office keeps it ("1" to "9999"), or '' when it is not a small whole number. */
+export function seatKey(seat) {
+  const n = typeof seat === 'string' && /^\s*\d{1,4}\s*$/.test(seat) ? Number(seat) : seat;
+  return Number.isInteger(n) && n >= 1 && n <= 9999 ? String(n) : '';
+}
+/** A project folder's name as sent by the page: text, as it is spelt on disk (so never cleaned), within reason, with
+ * no hidden or control characters; null when it cannot be kept. '' is the Consultants (no project). */
+const HIDDEN_IN_NAME = /[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u;
+export function folderKey(folder) {
+  if (folder === undefined || folder === null) return '';
+  if (typeof folder !== 'string' || folder.length > 260 || HIDDEN_IN_NAME.test(folder) || !safeKey(folder)) return null;
+  return folder;
+}
 /** The most hook events kept (one per thread id): a local program that posts made-up ids cannot grow the file without limit. */
 const HOOKS_MAX = 2000;
 /** Bump when the summary's shape changes: the cache is then read again from the start. */
@@ -69,17 +90,12 @@ export function cleanLedger(l) {
 }
 export const cleanDone = (d) => Object.fromEntries(Object.entries(isPlain(d) ? d : {}).filter(([id, v]) => safeKey(id) && typeof v === 'string'));
 
-const asideName = (file) => `${file.replace(/\.json$/, '')}.damaged-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-function setAside(file, why) {
-  const aside = asideName(file);
-  try { fs.copyFileSync(file, aside); console.error(`[data] ${path.basename(file)} ${why}: kept a copy as ${path.basename(aside)}.`); } catch { /* nothing to keep */ }
-}
-
 /**
  * One of the office's own files (data/). Missing: the fallback. There but damaged (not JSON, or not an object): copied
  * aside first (name.damaged-<time>.json), so the next save cannot wipe deleted threads, nicknames or the purse start.
  * A byte-order mark (Notepad) is read past. With `clean`, what was read is cut to the shapes the office uses; when
- * that dropped or repaired something, the file is copied aside too.
+ * that dropped or repaired something, the file is copied aside too. When the copy cannot be made, the file is kept:
+ * no save writes over it (files.mjs).
  * There but held by another program (an antivirus at start): tried again, then the office refuses to start rather
  * than treat a file it could not read as damaged and write over it.
  */
@@ -87,10 +103,12 @@ function readKept(file, fallback, clean) {
   let text;
   try { text = readText(file); } catch (e) {
     if (e.code === 'ENOENT') return fallback;
-    throw new Error(`${path.basename(file)} in the office's data folder could not be read (${e.code || e.message}). Nothing was changed: close whatever holds it, then start the office again.`);
+    const plain = new Error(`${path.basename(file)} in the office's data folder could not be read (${e.code || 'an error'}). Nothing was changed: close whatever holds it, then start the office again.`);
+    plain.code = 'EHELD';
+    throw plain;
   }
   let data;
-  try { data = JSON.parse(text.charCodeAt(0) === 0xfeff ? text.slice(1) : text); } catch { data = undefined; }
+  try { data = JSON.parse(text); } catch { data = undefined; }
   if (!isPlain(data)) { setAside(file, 'could not be read, and was started empty'); return fallback; }
   if (!clean) return data;
   const cleaned = clean(data);
@@ -108,6 +126,13 @@ export class Office {
     this.now = o.now || (() => Date.now());
     this.file = (n) => path.join(this.dataDir, n);
     this.settings = readKept(this.file('settings.json'), {}, cleanSettings);
+    // The day the office opened, dated ahead (set while the clock ran fast), would stop every token counting until
+    // that day: it becomes the start of today instead.
+    if (this.settings.openedAt && Date.parse(this.settings.openedAt) > this.now() + AHEAD_MS) {
+      const d = new Date(this.now());
+      this.settings.openedAt = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
+      this.saveSettings();
+    }
     if (!this.settings.openedAt) {
       this.settings.openedAt = new Date(this.now()).toISOString();
       this.saveSettings();
@@ -123,10 +148,18 @@ export class Office {
      * leaves no line in the transcript, so without it a restart would forget who is waiting for your permission. */
     this.hooks = {};
     const cut = this.now() - HOOK_KEEP_MS;
+    // An event dated ahead (written while the clock ran fast) is dropped: it would win over every real one.
+    const ahead = this.now() + AHEAD_MS;
+    const loaded = [];
     for (const [id, h] of Object.entries(readKept(this.file('hooks.json'), {}))) {
-      if (h && typeof h.kind === 'string' && Number(h.at) > cut) this.hooks[id] = { kind: h.kind, words: String(h.words || ''), at: Number(h.at) };
+      if (safeKey(id) && h && typeof h.kind === 'string' && Number(h.at) > cut && Number(h.at) <= ahead) loaded.push([id, { kind: h.kind, words: String(h.words || ''), at: Number(h.at) }]);
     }
+    // Oldest first: hook() takes the oldest off the front.
+    for (const [id, h] of loaded.sort((a, b) => a[1].at - b[1].at)) this.hooks[id] = h;
+    this.hookCount = loaded.length;
     this.dirty = false;
+    // What was bought is read once now, so a poll while another program holds office.json still shows it.
+    try { boughtOf(this); } catch { /* read on the first poll */ }
     /** Links that open a thread in the AI desktop app (the open-thread button). */
     this.appLinks = o.appLinks || new AppLinks();
   }
@@ -184,10 +217,16 @@ export class Office {
     const had = this.files[file];
     if (had && had.size === st.size && had.mtime === st.mtimeMs) return 0;
     // Smaller, or written again in place (the place we stopped is no longer after a line end): read it from the start.
-    const keep = had && st.size >= had.size && stillAfterLineEnd(file, had.offset);
+    // A read that stopped inside a very long line it passed over (midLine) is not taken for a rewrite.
+    const keep = had && st.size >= had.size && (had.midLine || stillAfterLineEnd(file, had.offset));
     const rec = keep ? had : { offset: 0, t: emptyThread(id, this.settings.openedAt) };
+    // Another program holding the file (an antivirus, a backup) for a moment: nothing is recorded, so the next scan
+    // reads it. Recording its new size and time here would skip what was written for good.
+    const offset = readFrom(file, rec.t, rec.offset); // -1: it could not be opened, and nothing was read
+    if (offset < 0) return 0;
     rec.parent = parent;
-    rec.offset = readFrom(file, rec.t, rec.offset);
+    rec.offset = offset;
+    rec.midLine = offset > 0 && !stillAfterLineEnd(file, offset);
     rec.size = st.size;
     rec.mtime = st.mtimeMs;
     if (!parent && !rec.t.title) {
@@ -241,30 +280,66 @@ export class Office {
     try { return fs.readdirSync(root, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; }
   }
 
-  /** Remembers a hook event (advanced setup) for a thread. */
+  /** Remembers a hook event (advanced setup) for a thread. hooks.json is written at most once a second (a later
+   * event in the same second is written by a timer, or by the next save), so a burst of events never holds the server. */
   hook(id, kind, words = '') {
     if (!id || !safeKey(id)) return;
     const now = this.now();
-    const had = this.hooks[id];
+    const had = own(this.hooks, id);
     // The same event again within a second (a program posting in a loop) changes nothing and is not written again.
     if (had && had.kind === kind && had.words === words && now - had.at < 1000) return;
+    // Kept in the order they came (a thread's newer event moves it to the end), so the oldest are always first: the
+    // ones past HOOK_KEEP_MS, and past the cap, come off the front without a look at every id on each event.
+    delete this.hooks[id];
     this.hooks[id] = { kind, words, at: now };
-    for (const [k, h] of Object.entries(this.hooks)) if (h.at <= now - HOOK_KEEP_MS) delete this.hooks[k];
-    const ids = Object.keys(this.hooks);
-    if (ids.length > HOOKS_MAX) for (const k of ids.sort((a, b) => this.hooks[a].at - this.hooks[b].at).slice(0, ids.length - HOOKS_MAX)) delete this.hooks[k];
+    let count = this.hookCount + (had ? 0 : 1);
+    for (const k in this.hooks) {
+      if (count <= HOOKS_MAX && this.hooks[k].at > now - HOOK_KEEP_MS) break;
+      delete this.hooks[k];
+      count--;
+    }
+    this.hookCount = count;
+    this.hooksDirty = true;
+    const since = Date.now() - (this.hooksSavedAt || 0);
+    if (since < 0 || since >= 1000) this.saveHooks();
+    else if (!this.hooksTimer) {
+      this.hooksTimer = setTimeout(() => { this.hooksTimer = null; try { this.saveHooks(); } catch (e) { console.error('[hooks]', e.message); } }, 1000 - since);
+      this.hooksTimer.unref?.();
+    }
+  }
+  saveHooks() {
+    if (!this.hooksDirty) return;
+    this.hooksSavedAt = Date.now();
     writeJson(this.file('hooks.json'), this.hooks);
+    this.hooksDirty = false;
   }
 
-  setNickname(folder, seat, nick) {
-    const f = String(folder ?? '');
-    if (!safeKey(f)) return false;
-    const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
-    const name = String(nick || '').replace(/\s+/g, ' ').trim().slice(0, 40);
-    this.seatNames[f] = this.seatNames[f] || {};
-    if (name) this.seatNames[f][s] = { ...(this.seatNames[f][s] || {}), nick: name };
-    else if (this.seatNames[f][s]) delete this.seatNames[f][s].nick;
-    writeJson(this.file('seats.json'), this.seatNames);
+  /**
+   * Changes the seats records (nicknames, looks, stars) with `change(rec)` on one seat's record, and saves them. When
+   * the save fails, nothing is kept in memory either (the page would otherwise show a change that is not on disk), and
+   * the failure is passed on in plain words. Answers false when the folder or seat cannot be kept.
+   */
+  changeSeat(folder, seat, change) {
+    const f = folderKey(folder);
+    const s = seatKey(seat);
+    if (f === null || !s) return false;
+    const before = this.seatNames;
+    const next = { ...before, [f]: { ...(own(before, f) || {}) } };
+    const rec = { ...(own(next[f], s) || {}) };
+    if (change(rec) === false) return false;
+    if (Object.keys(rec).length) next[f][s] = rec;
+    else delete next[f][s];
+    writeJson(this.file('seats.json'), next); // throws, and nothing changed, when it cannot be saved
+    this.seatNames = next;
     return true;
+  }
+
+  /** A seat's nickname: one line, hidden and control characters out, at most 40 characters (never half of one).
+   * Text only: anything else is refused. An empty name takes the nickname off. */
+  setNickname(folder, seat, nick) {
+    if (nick !== undefined && nick !== null && typeof nick !== 'string') return false;
+    const name = oneLine(nick ?? '', 40);
+    return this.changeSeat(folder, seat, (rec) => { if (name) rec.nick = name; else delete rec.nick; });
   }
 
   /**
@@ -273,55 +348,34 @@ export class Office {
    * (the star is kept). The project stars are kept in the office's settings, the seat ones beside the nickname.
    */
   setFavourite(folder, seat, on) {
-    const f = String(folder ?? '');
-    if (!safeKey(f)) return false;
-    const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
-    this.seatNames[f] = this.seatNames[f] || {};
-    const rec = { ...(this.seatNames[f][s] || {}) };
-    if (on) rec.fav = true;
-    else delete rec.fav;
-    delete rec.favHidden;
-    this.seatNames[f][s] = rec;
-    writeJson(this.file('seats.json'), this.seatNames);
-    return true;
+    return this.changeSeat(folder, seat, (rec) => { if (on) rec.fav = true; else delete rec.fav; delete rec.favHidden; });
   }
   setFavouriteProject(folder, on) {
-    const f = String(folder ?? '');
-    const list = new Set(Array.isArray(this.settings.favProjects) ? this.settings.favProjects.map(String) : []);
+    const f = folderKey(folder);
+    if (f === null) return false;
+    const list = new Set(Array.isArray(this.settings.favProjects) ? this.settings.favProjects.filter((x) => typeof x === 'string') : []);
     if (on) list.add(f);
     else list.delete(f);
-    this.settings.favProjects = [...list].sort();
-    this.saveSettings();
+    this.changeSettings({ favProjects: [...list].sort() });
+    return true;
   }
   setFavouriteHidden(folder, seat, hidden) {
-    const f = String(folder ?? '');
-    if (!safeKey(f)) return false;
-    const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
-    this.seatNames[f] = this.seatNames[f] || {};
-    const rec = { ...(this.seatNames[f][s] || {}) };
-    if (hidden) rec.favHidden = true;
-    else delete rec.favHidden;
-    this.seatNames[f][s] = rec;
-    writeJson(this.file('seats.json'), this.seatNames);
-    return true;
+    return this.changeSeat(folder, seat, (rec) => { if (hidden) rec.favHidden = true; else delete rec.favHidden; });
   }
 
   /** A seat's look (EDIT on the card): a checked look, or null for the made-up one again. Answers false if refused. */
   setLook(folder, seat, look) {
-    const f = String(folder ?? '');
-    if (!safeKey(f)) return false;
-    const s = String(Math.max(1, Math.floor(Number(seat) || 1)));
-    this.seatNames[f] = this.seatNames[f] || {};
-    const rec = { ...(this.seatNames[f][s] || {}) };
-    if (look === null) delete rec.look;
-    else {
-      const clean = cleanLook(look);
-      if (!clean) return false;
-      rec.look = clean;
-    }
-    this.seatNames[f][s] = rec;
-    writeJson(this.file('seats.json'), this.seatNames);
-    return true;
+    let clean = null;
+    if (look !== null) { clean = cleanLook(look); if (!clean) return false; }
+    return this.changeSeat(folder, seat, (rec) => { if (clean) rec.look = clean; else delete rec.look; });
+  }
+
+  /** Changes the office's own settings with the fields given, and saves them; when the save fails, nothing changes. */
+  changeSettings(fields) {
+    const next = { ...this.settings };
+    for (const [k, v] of Object.entries(fields)) { if (v === undefined) delete next[k]; else next[k] = v; }
+    writeJson(this.file('settings.json'), next);
+    this.settings = next;
   }
 
   /**
@@ -329,7 +383,7 @@ export class Office {
    * prompt leaves no line in the transcript). "Answered" is kept against this, so a later need shows again.
    */
   needKey(id, lastAt) {
-    const h = this.hooks[id];
+    const h = own(this.hooks, id);
     const t = Date.parse(lastAt) || 0;
     return h && h.at > t ? `hook:${h.at}` : lastAt || '';
   }
@@ -338,16 +392,20 @@ export class Office {
   markDone(id) {
     if (!safeKey(id) || !Object.hasOwn(this.ledger.threads, id)) return false;
     const rec = this.ledger.threads[id];
-    this.done[id] = this.needKey(id, rec.lastAt);
-    writeJson(this.file('done.json'), this.done);
+    const next = { ...this.done, [id]: this.needKey(id, rec.lastAt) };
+    writeJson(this.file('done.json'), next);
+    this.done = next;
     return true;
   }
 
   /** Saves the ledger and the read positions, if anything changed. With { atMost } (ms), not more often than that: the
-   * 3-second tick saves at most every 30 seconds while threads are busy (both files always together, so they agree). */
+   * 3-second tick saves at most every 30 seconds while threads are busy (both files always together, so they agree).
+   * A last save that seems to be in the future (the clock was put back) does not hold the next one up. */
   save({ atMost = 0 } = {}) {
+    if (this.hooksDirty) { try { this.saveHooks(); } catch (e) { console.error('[hooks]', e.message); } }
     if (!this.dirty) return;
-    if (atMost && Date.now() - (this.savedAt || 0) < atMost) return;
+    const since = Date.now() - (this.savedAt || 0);
+    if (atMost && since >= 0 && since < atMost) return;
     this.savedAt = Date.now();
     writeJson(this.file('ledger.json'), this.ledger);
     writeJson(this.file('cache.json'), { version: CACHE_VERSION, since: this.settings.openedAt, files: this.files });
@@ -375,9 +433,10 @@ export class Office {
     const live = Object.create(null);
     for (const t of mains) {
       if (!t.startedAt) continue; // nothing said yet
+      if (!safeKey(t.id)) continue; // a thread called __proto__ would become the ledger's prototype
       const helpers = helpersOf[t.id] || [];
       const counted = helpers.filter((h) => h.worked);
-      const st = stateOf(t, now, quietMs, helpers, this.hooks[t.id]);
+      const st = stateOf(t, now, quietMs, helpers, own(this.hooks, t.id));
       const outByDay = { ...t.outByDay };
       for (const h of counted) for (const [d, n] of Object.entries(h.outByDay)) outByDay[d] = (outByDay[d] || 0) + n;
       live[t.id] = {
@@ -409,7 +468,7 @@ export class Office {
     const seats = assignSeats(spans, kept, quietMs, now);
     for (const x of Object.values(live)) {
       const s = seats[x.id];
-      const old = ledger.threads[x.id];
+      const old = own(ledger.threads, x.id);
       const rec = { folder: s.folder, seat: s.seat, title: x.title, startedAt: x.startedAt, lastAt: x.lastAt, out: x.out, outSince: x.outSince, outByDay: x.outByDay, asked: x.asked };
       if (old && (old.folder !== rec.folder || old.seat !== rec.seat) && process.env.AI_OFFICE_LOG !== '0') {
         if (!preview) console.log(`[seat] ${x.id.slice(0, 8)} "${x.title}" moved from ${old.folder || 'Consultants'} ${old.seat} to ${rec.folder || 'Consultants'} ${rec.seat}`);
@@ -421,7 +480,7 @@ export class Office {
     const person = (folder, seat) => {
       const key = `${folder}#${seat}`;
       if (!people[key]) {
-        const kept = (Object.hasOwn(this.seatNames, folder) ? this.seatNames[folder]?.[seat] : null) || {};
+        const kept = own(own(this.seatNames, folder), String(seat)) || {};
         const nick = kept.nick || '';
         const look = kept.look || null;
         // A favourite: the seat itself, or every seat of a favourite project.
@@ -477,7 +536,7 @@ export class Office {
       const asked = x.asked || x.words;
       const lastMs = Date.parse(r.lastAt) || 0;
       if (lastMs < cutoff) continue;
-      if (this.done[id] && this.done[id] === this.needKey(id, r.lastAt)) continue;
+      if (own(this.done, id) && this.done[id] === this.needKey(id, r.lastAt)) continue;
       const p = person(r.folder, r.seat);
       waiting.push({ id, person: p.key, name: p.name, folder: r.folder, title: r.title, asked, since: (needsNow && x.since) || lastMs, gone: goneWaiting });
     }

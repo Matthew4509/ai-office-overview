@@ -16,6 +16,8 @@ const emptyConfig = path.join(tmp, 'empty.gitconfig');
 fs.writeFileSync(emptyConfig, '');
 process.env.GIT_CONFIG_GLOBAL = emptyConfig;
 process.env.GIT_CONFIG_NOSYSTEM = '1';
+// "GitHub" here is a bare repository in temp: Check fetches only from https:// unless this is set (the tests only).
+process.env.AI_OFFICE_TEST_LOCAL_ORIGIN = '1';
 const git = (dir, ...a) => execFileSync('git', ['-C', dir, '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'init.defaultBranch=main', ...a], { stdio: 'pipe' }).toString().trim();
 const save = (d, file, text) => { fs.writeFileSync(path.join(d, file), text); git(d, 'add', file); git(d, 'commit', '-q', '-m', `save ${file}`); };
 const pkg = (v) => `${JSON.stringify({ name: 'ai-office-overview', version: v })}\n`;

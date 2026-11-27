@@ -35,7 +35,8 @@ SolidCompression=yes
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 LicenseFile=stage\LICENSE
-; The installed folder must have no $, backtick, quote or % in its path (advanced setup refuses one): the default has none.
+; The installed folder must have no $, backtick, quote or % in its path (advanced setup refuses one): the default has
+; none, and a folder chosen with one is refused ([Code], NextButtonClick and PrepareToInstall).
 
 [Tasks]
 Name: "desktopicon"; Description: "Put an {#AppName} shortcut on the desktop"; GroupDescription: "Shortcuts:"
@@ -45,7 +46,20 @@ Name: "startup"; Description: "Start the office quietly when I sign in to Window
 Source: "stage\*"; DestDir: "{app}"; Flags: recursesubdirs ignoreversion
 ; data\ is never in the stage: the office makes it on its first start, and uninstall asks before deleting it.
 
+[InstallDelete]
+; A file an older version had and this one does not must not stay behind: the program folders hold only what the
+; installer put there, so they are emptied before the new files go in. data\ is never listed: it is the person's own.
+Type: filesandordirs; Name: "{app}\src"
+Type: filesandordirs; Name: "{app}\public"
+Type: filesandordirs; Name: "{app}\test"
+Type: filesandordirs; Name: "{app}\tools"
+Type: filesandordirs; Name: "{app}\node"
+
 [Icons]
+; The same shortcut names as a clone's or a zip copy's setup ("AI Office Overview"), so there is one office in the
+; Start menu: installing over a clone's shortcut replaces it (the clone's Setup then says its shortcut starts the
+; installed copy). The clone's setup leaves these alone, and uninstall here (tools\setup.mjs uninstall, below) removes
+; only the shortcuts that start this folder before Inno removes its own.
 Name: "{userprograms}\{#AppName}"; Filename: "{app}\Start AI Office Overview.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\public\app.ico"; Comment: "Your Claude Code threads as staff in an office"; Flags: runminimized
 Name: "{userdesktop}\{#AppName}"; Filename: "{app}\Start AI Office Overview.cmd"; WorkingDir: "{app}"; IconFilename: "{app}\public\app.ico"; Comment: "Your Claude Code threads as staff in an office"; Flags: runminimized; Tasks: desktopicon
 Name: "{userstartup}\{#AppName}"; Filename: "{app}\Start AI Office Overview.cmd"; Parameters: "quiet"; WorkingDir: "{app}"; IconFilename: "{app}\public\app.ico"; Flags: runminimized; Tasks: startup
@@ -58,6 +72,27 @@ Filename: "{app}\Start AI Office Overview.cmd"; WorkingDir: "{app}"; Description
 Filename: "{app}\node\node.exe"; Parameters: """{app}\tools\setup.mjs"" uninstall"; WorkingDir: "{app}"; Flags: runhidden waituntilterminated; RunOnceId: "StopAndClean"
 
 [Code]
+// Advanced setup refuses a folder whose path holds $, %, a backtick or " (Claude Code would read them as part of the
+// hook's command), and cmd reads a %NAME% in it as a variable. Such a folder is refused before anything is copied.
+function FolderIsPlain(Dir: String): Boolean;
+begin
+  Result := (Pos('$', Dir) = 0) and (Pos('%', Dir) = 0) and (Pos('`', Dir) = 0) and (Pos('"', Dir) = 0);
+end;
+
+function PlainFolderMessage(Dir: String): String;
+begin
+  Result := 'This folder cannot be used:' + #13#10 + Dir + #13#10#13#10 + 'Its path holds a $, %, ` or " sign, which advanced setup and the shortcuts cannot work with. Choose a folder without them (the one suggested has none).';
+end;
+
+function NextButtonClick(CurPageID: Integer): Boolean;
+begin
+  Result := True;
+  if (CurPageID = wpSelectDir) and not FolderIsPlain(WizardDirValue) then begin
+    SuppressibleMsgBox(PlainFolderMessage(WizardDirValue), mbError, MB_OK, IDOK);
+    Result := False;
+  end;
+end;
+
 // A running office holds no installed file open for long, but its page would be served from a folder between two
 // versions: stop it first, then the files are replaced.
 function PrepareToInstall(var NeedsRestart: Boolean): String;
@@ -65,6 +100,11 @@ var
   Code: Integer;
 begin
   Result := '';
+  // A silent install given /DIR= skips the folder page: the same check, as a reason to stop.
+  if not FolderIsPlain(ExpandConstant('{app}')) then begin
+    Result := PlainFolderMessage(ExpandConstant('{app}'));
+    exit;
+  end;
   if FileExists(ExpandConstant('{app}\node\node.exe')) and FileExists(ExpandConstant('{app}\server.mjs')) then
     Exec(ExpandConstant('{app}\node\node.exe'), '"' + ExpandConstant('{app}\server.mjs') + '" --stop', ExpandConstant('{app}'), SW_HIDE, ewWaitUntilTerminated, Code);
 end;

@@ -190,6 +190,13 @@ pre.code { background: var(--page); border: 1px solid var(--line); border-radius
 #office { display: flex; gap: 14px; align-items: flex-start; justify-content: center; }
 #office canvas { flex: none; }
 .office-strip { flex: 0 0 240px; margin: 0; }
+/* The machines' buttons for the keyboard (office.js): out of sight until one has the focus, then over the office's top corner. */
+#office { position: relative; }
+.office-keys { position: absolute; top: 8px; left: 8px; z-index: 2; }
+.office-keys .btn { color: var(--ink); border-color: var(--accent); }
+.office-keys .btn:not(:focus) { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+/* A card's name takes the focus when the card is opened from the keyboard: no ring for that, as it is not a control. */
+.name-heading:focus:not(:focus-visible) { outline: none; }
 /* A wide panel with room below: the strip under the office (office.js fit() decides), so the office fills the panel. */
 #office.office-stacked { flex-direction: column; align-items: center; }
 #office.office-stacked .office-strip { flex: none; align-self: stretch; margin: 6px 0 0; min-height: 4.4em; }

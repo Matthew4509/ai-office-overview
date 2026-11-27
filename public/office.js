@@ -779,6 +779,7 @@
     const snap = world.first || now - world.seenAt > 4000 || filter !== world.filter;
     world.filter = filter;
     if (data.shop) officeData(data.shop);
+    for (const v of views) syncKeys(v);
     const nowMs = data.now || Date.now();
     world.staff = list.filter((p) => p.state !== 'home' || (p.fav && !p.favHidden)).map((p) => ({
       id: p.key,
@@ -2379,11 +2380,28 @@
     });
   }
 
+  /** Shows the machine buttons that have a machine to open now (the arcade bought and its lounge open, the trophy earned). */
+  function syncKeys(view) {
+    const [arcade, , trophy] = view.keys?.children || [];
+    if (!arcade) return;
+    const hasArcade = !!world.rooms.lounge.arcade && !lockedRoom(ROOMS[3]);
+    if (arcade.hidden === hasArcade) arcade.hidden = !hasArcade;
+    if (trophy.hidden === !!world.rooms.trophy) trophy.hidden = !world.rooms.trophy;
+  }
+
   function addView(holder) {
     const canvas = el('canvas', { class: 'office-canvas', role: 'img', 'aria-label': 'The office: each Claude thread as a little person at their project\'s desk while it works, standing with a question mark when it needs you, in the meeting room when it thinks a long time (once it has a table), in the kitchen, the lounge or a deck chair when it has finished, and on a beach towel once a favourite has gone home. A locked room is dark: click it to unlock it. The List tab says the same in words.' });
     const strip = el('div', { class: 'office-strip', 'aria-live': 'off' });
-    const view = { canvas, ctx: canvas.getContext('2d'), strip };
-    holder.append(canvas, strip);
+    // The machines the drawing opens by a click, as buttons for the keyboard: out of sight until the Tab key reaches
+    // them, then shown over the office's top corner. The arcade's only once it stands in an open lounge.
+    const machine = (label, title, open) => el('button', { type: 'button', class: 'btn', title, onclick: open }, label);
+    const keys = el('div', { class: 'office-keys', role: 'group', 'aria-label': 'Office machines' },
+      machine('Play on the arcade machine', 'Tetris, Lunar Lander and Moon Rover', () => app()?.arcade?.open()),
+      machine('Use the vending machine', 'Energy drinks for the team (a 1M-token coin)', () => openVending()),
+      machine('Read the trophy case', 'World\'s Best Boss', () => showTrophy(view)));
+    const view = { canvas, ctx: canvas.getContext('2d'), strip, keys };
+    holder.append(keys, canvas, strip);
+    syncKeys(view);
     hookPointer(view);
     views.push(view);
     new ResizeObserver(() => { view.drawnAt = 0; wake(); }).observe(holder);
@@ -2626,6 +2644,8 @@
       else if (item.keeps) callFitter(item.id);
       officeData(d.shop);
       drawShop();
+      // The header's balance too, at once (it is drawn from the page's own copy of the shop).
+      app()?.shopBought?.(d.shop);
       // One short line: the purse line above says what is left, and Transaction history keeps the record.
       if (item.id === 'coffee') {
         deliveries.push({ kind: 'coffee', who: present().map((p) => p.id), at: 0 });
@@ -2719,6 +2739,7 @@
         officeData(d.shop);
         drawShop();
         showBalance();
+        app()?.shopBought?.(d.shop);
         show('THANK YOU', 'Cans coming out…');
         // The delay is set on the element, not as a style attribute: the page's rules refuse inline styles.
         tray.replaceChildren(...present().slice(0, 6).map((_, i) => { const can = el('span', { class: `vend-can c${i % 4} out` }); can.style.animationDelay = `${i * 0.12}s`; return can; }));

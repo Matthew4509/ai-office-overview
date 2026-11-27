@@ -23,6 +23,21 @@ for /f "delims=" %%m in ('node -p "+process.versions.node.split('.')[0]"') do se
 if %NODE_MAJOR% LSS 20 (echo  The Node.js on this PC is too old to ship: the office needs 20 or newer. & exit /b 1)
 echo  Version %VERSION%, with Node.js %NODE_MAJOR% from "%NODE_EXE%"
 
+rem Node.js's licence (it also covers OpenSSL, ICU, V8 and libuv) must go with the node.exe it ships. The one beside
+rem node.exe is used; an install without one (winget, nvm) uses installer\node-LICENSE, a local copy that is not in git.
+for /f "delims=" %%n in ('node -p "process.version"') do set "NODE_VERSION=%%n"
+set "NODE_LICENSE="
+for %%l in ("%NODE_EXE%\..\LICENSE") do if exist "%%~l" set "NODE_LICENSE=%%~fl"
+if not defined NODE_LICENSE if exist "node-LICENSE" set "NODE_LICENSE=%~dp0node-LICENSE"
+if not defined NODE_LICENSE (
+  echo.
+  echo  Node.js's licence was not found beside "%NODE_EXE%" or as installer\node-LICENSE, and the installer
+  echo  must not ship node.exe without it. Save the licence of this version, %NODE_VERSION%, as installer\node-LICENSE:
+  echo    https://github.com/nodejs/node/blob/%NODE_VERSION%/LICENSE
+  echo  then run build.cmd again.
+  exit /b 1
+)
+
 rem The stage: the files the public repository ships (the push copy list), nothing else.
 if exist stage rmdir /s /q stage
 mkdir stage\node || exit /b 1
@@ -33,7 +48,7 @@ for %%d in (src public test tools) do robocopy "..\%%d" "stage\%%d" /e /njh /njs
 if not exist "stage\public\app.ico" node ..\tools\make-icon.mjs || exit /b 1
 if not exist "stage\public\app.ico" copy /y "..\public\app.ico" "stage\public\" >nul
 copy /y "%NODE_EXE%" "stage\node\node.exe" >nul || exit /b 1
-for %%l in ("%NODE_EXE%\..\LICENSE") do if exist "%%~l" copy /y "%%~l" "stage\node\LICENSE" >nul
+copy /y "%NODE_LICENSE%" "stage\node\LICENSE" >nul || exit /b 1
 
 "%ISCC%" /Q "/DAppVersion=%VERSION%" ai-office-overview.iss || exit /b 1
 echo.
