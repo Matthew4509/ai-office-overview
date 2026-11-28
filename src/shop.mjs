@@ -97,6 +97,20 @@ export function boughtOf(office, { strict = false } = {}) {
   }
 }
 
+/** The purchases to write back: `bought` (what this version sells, the new one last) with every record of an item
+ * this version does not sell (bought in a newer version, say) kept where it was, so going back a version and buying
+ * something never drops it. */
+function withUnknown(file, bought) {
+  let raw;
+  try { raw = JSON.parse(readText(file, 1).replace(/^﻿/, '')); } catch { return bought; }
+  const list = Array.isArray(raw?.bought) ? raw.bought.filter((b) => b && typeof b === 'object' && !Array.isArray(b)) : [];
+  if (!list.some((b) => !SHOP.some((i) => i.id === b.item))) return bought;
+  let k = 0;
+  const known = cleanList(list).length;
+  const out = list.map((b) => (SHOP.some((i) => i.id === b.item) ? bought[k++] : b));
+  return k === known ? [...out, ...bought.slice(k)] : bought;
+}
+
 export function purseOf(earned, bought) {
   const spent = bought.reduce((a, b) => a + b.price, 0);
   const e = Math.max(0, Math.round(earned) || 0);
@@ -185,7 +199,7 @@ export function buy(office, item, now = new Date()) {
   const left = purseOf(earned, bought).left;
   if (left < i.price) return no(`Not enough tokens yet for ${i.the}.`, `It costs ${n(i.price)} and the office has ${n(left)} to spend.`, 'Every token Claude writes from now on adds to it: come back after some work.');
   bought.push({ item: i.id, price: i.price, at: now.toISOString() });
-  try { writeJson(fileOf(office), { bought }, 1); } catch (e) {
+  try { writeJson(fileOf(office), { bought: withUnknown(fileOf(office), bought) }, 1); } catch (e) {
     return no('The purchase could not be kept.', e.code === 'EKEPT' ? 'office.json could not be read, and a safe copy of it could not be made, so it was not written over. Nothing was bought or spent.' : `office.json could not be saved (${e.code || 'an error'}), so nothing was bought or spent.`, 'Check the disk has room and nothing holds the file, then try again.');
   }
   return { ok: true, item: i.id, shop: shopOf(office, earned) };

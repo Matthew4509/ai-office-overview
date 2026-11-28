@@ -210,7 +210,8 @@ export function timeOf(v) {
   if (typeof v !== 'string' || !v) return '';
   const ms = Date.parse(v);
   if (Number.isNaN(ms) || ms > Date.now() + AHEAD_MS) return '';
-  return v;
+  // Times are compared as text, so one written another way ("Fri, 20 Nov 2026 …") is put in the usual form first.
+  return /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?Z$/.test(v) ? v : new Date(ms).toISOString();
 }
 
 /** Adds one parsed line to a summary. */

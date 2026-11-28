@@ -385,7 +385,9 @@ export class Office {
   needKey(id, lastAt) {
     const h = own(this.hooks, id);
     const t = Date.parse(lastAt) || 0;
-    return h && h.at > t ? `hook:${h.at}` : lastAt || '';
+    // Only a hook that needs you (a permission prompt) is a new reason to be on the list. A finished reply, and the
+    // "waiting for your input" notice a minute after it, say nothing new: the reply itself moves lastAt.
+    return h && h.kind === 'needs' && h.at > t ? `hook:${h.at}` : lastAt || '';
   }
 
   /** Takes a thread off the Needs attention list until it needs you again (a new reply, or a new hook event). */

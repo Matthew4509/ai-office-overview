@@ -1,20 +1,42 @@
 # AI Office Overview
 
-An office that shows what your Claude Code threads are doing. Each thread is a little person at their project's desk:
-working, thinking in the meeting room, standing up with a "?" when they need you, resting when they have finished, and
-going home when they have gone quiet. As your staff work, the tokens they make can be spent on office improvements.
+**See your Claude Code threads as staff in a little office, on your own PC.**
 
-It runs on your PC only. It reads Claude Code's transcripts and never sends them anywhere.
+For people who run several Claude Code threads at once and want to see at a glance which are working, which are
+thinking and which are waiting for an answer. Each thread is a little person at their project's desk: working,
+thinking in the meeting room, standing up with a "?" when they need you, resting when they have finished, and going
+home when they have gone quiet. The tokens your staff write can be spent on furnishing the office.
 
-This is office overview only. The head office has tools to manage your projects, scan and preview projects developed
-locally. If you prefer that one, it's [AI Head Office Overview](https://github.com/Matthew4509/ai-head-office-overview).
+It runs on your PC only. It reads the transcripts Claude Code already keeps, never changes them and never sends them
+anywhere.
 
-- **AI Office Overview** (this one): the office only. Your threads as staff, Needs attention, Favourites, Staff rewards
-  and the Thoughts chat. Needs Node.js 20 or newer. It sends nothing anywhere (Setup › Update asks GitHub only when you
-  press it).
-- **AI Head Office Overview**: the same office, plus a tile for each project (run its local copy, open its folder, a
-  terminal or the browser), a built-in security audit, git backup and live-site marks, Prompts and a project planner.
-  It checks the live addresses you add. Windows 10 or 11 with Edge, Node.js 22 or newer.
+![The office: staff at their desks, two standing with a "?", Thoughts under the office and Needs attention on the right](screenshots/office.png)
+
+*The office (made-up data). Each thread is a person at their project's desk. Two stand with a "?" because they asked
+you something, and Needs attention on the right lists them, longest waiting first. Thoughts, under the office, is
+the staff's chat about what their threads are doing.*
+
+## Which one is for you?
+
+There are two versions of the office. Pick one:
+
+| | What it is | What it needs | What leaves your PC |
+|---|---|---|---|
+| **AI Office Overview** (this one) | **The office only**: your threads as staff, Needs attention, Favourites, Staff rewards and the Thoughts chat | Node.js 20 or newer (made for Windows; the installer brings its own Node.js) | Nothing (GitHub only when you press Setup › Update › Check) |
+| **[AI Head Office Overview](https://github.com/Matthew4509/ai-head-office-overview)** | The office **plus project tools**: a tile per project to run its local copy, git and live-site marks, a security audit, backups, prompts and a project planner | Windows 10 or 11 with Edge, Node.js 22 or newer | Plain checks of the live addresses you add; GitHub when you check for updates |
+
+Both read the transcripts Claude Code already keeps. Both are independent projects, not made by Anthropic.
+
+**Quick start:** download the installer from the [Releases page](https://github.com/Matthew4509/ai-office-overview/releases)
+and run it, or with Node.js 20 or newer:
+
+```
+git clone https://github.com/Matthew4509/ai-office-overview.git
+cd ai-office-overview
+node server.mjs --open
+```
+
+Nothing to install from npm: it has no dependencies.
 
 ## Install it
 
@@ -45,74 +67,52 @@ or Open in Claude button (not tested there).
 Double-click **Start AI Office Overview.cmd** (or its shortcut), or run:
 
 ```
-node server.mjs
+node server.mjs --open
 ```
 
-The page opens by itself once the office is ready (or go to http://127.0.0.1:8860/). The very first start reads all
+The page opens by itself once the office is ready (without `--open`, go to http://127.0.0.1:8860/). The very first start reads all
 your Claude transcripts once, which can take a minute: keep the window open (a shortcut keeps it minimised). Later
 starts take about a second. The first start also opens the office: the spending balance counts from then on. Starting it a second
 time over the same data folder says it is already running and stops. `node server.mjs --status` says whether it runs,
 and `node server.mjs --stop` stops it (uninstall.cmd and the installer use this). Setup › About › Quit stops it too.
 
-## What you see
+## Screenshots
 
-- **AI Office Overview** (the title, top left) goes back to the office with all projects. The page always opens on the
-  office (an address ending `#list` or `#favourites` opens that tab instead).
-- **Sun, moon and auto** (top right): light, dark, or Auto, which is light from sunrise to sunset and dark at night.
-  Sunrise is worked out from this PC's time zone, so nothing is asked online. Setup also has **Match Windows**. Dark dims
-  the rooms and the beach too. Until one is picked the office is light.
-- **Setup** (the gear, top right) has tabs: **Setup** (the three shortcuts, then easy or advanced setup), **Office**
-  (theme, the Thoughts chat, the projects folder, the gone-home time), **Update**, **Help** and **About** (version,
-  Quit, Uninstall).
-- **Projects** (down the left; above the office on a narrower window): All projects, then every project with a thread
-  today, with how many people are working, thinking, need you, or have finished. Click one to show only that project.
-  When everyone sits in one project and no projects folder is set, a line under the list asks "Are your projects in
-  one folder? Choose it": Choose it opens Setup at the projects folder box.
-- **The office** (or **List**, the same in words): click a person to open their card. What the person picked is doing
-  shows to the right of the office (under it on a narrow screen). On a wide window the page itself does not scroll:
-  the middle and the right panel each scroll on their own.
-- **Ticks under the tabs** (with the office): **Show names** (the staff's names), **Project on screens** (the project's name above
-  each desk's computer) and **Show general chit-chat** (the office banter in Thoughts; unticked, Thoughts keeps only what
-  the threads are doing). All three are ticked until you untick them. Kept in this
-  browser.
-- **Needs attention** (right panel, first tab): every thread whose last reply asked you something, longest waiting first. Press
-  "Answered: take off the list" on the card once you have dealt with it; it comes back if they ask again.
-- **A person's card** shows their name with a **star** beside it (a favourite) and **EDIT** (their name and look,
-  TOMLIN's look editor; both belong to the seat), **Open in Claude** (opens their thread in the Claude desktop app), their project and seat, what they are
-  doing now and for how long, their recent messages, their last few steps, what they asked, and **Earnings**: one line
-  with today's tokens that opens to their helpers and the tokens they wrote (today, since the office opened, before it
-  opened, all time).
-- **List** shows everyone as tiles (up to 5 across): picture and name, then project and what they are doing.
-- **Favourites** (third tab): each project with a favourite, its name as a subtitle and its favourite staff in a row.
-  Star a person with the star beside their name on their card, or everyone in their project with **Favourite
-  project**. A favourite
-  who goes home stays at the office instead: they lie on a beach towel until their next thread starts, then walk back
-  to their desk. The star belongs to the seat, so the next handover thread in that seat is a favourite too. A
-  favourite who has gone home has a small **Hide** box (off the tab and the beach; "Show hidden" brings them back).
-- **Staff rewards** (right panel, second tab; "Spending balance" at the top right opens it): the shop that furnishes the
-  office. The meeting room and the lounge start locked: dark, with a padlock on the door. Click one to see what it costs
-  and unlock it (the lounge 10M tokens, the meeting room 20M). Until then Staff rewards says "Room not available" for
-  it, with an Unlock button, instead of its furniture.
-- **Life in the office:** a courier brings each treat to the front door, the IT tech walks over and unlocks a room you
-  buy, and a fitter carries each new piece of furniture in. The staff wave a thank-you, try out what is new, and the
-  ones waiting for your answer take a short break in the lounge or on a deck chair, then come back. Pet rocks and
-  rubber ducks sit on the desks (hover for their names); the ducks go to meetings, and a run of bugs calls the council
-  of ducks. Ice creams and cake come to the kitchen table like the other treats, and desk cacti, a wall clock that
-  keeps the real time, a water cooler and an inflatable flamingo on the sea fill the rows three across. Buy everything
-  and treat the team to each treat once, and the trophy case (World's Best Boss) arrives.
-- **The arcade machine** (lounge, once bought): click it to play Tetris, Lunar Lander or Moon Rover on its own cabinet.
-  A game plays while its screen has the keyboard; best scores are kept in this browser.
-- **The vending machine** (kitchen): click it and insert a 1M-token coin. Everyone in gets an energy drink and, for a
-  minute, walks and talks three times as fast, then slumps. Anyone with nothing to do (resting, waiting for a reply, on
-  a beach towel) dashes from spot to spot around the office and the beach, and goes back when it wears off.
-- **The TV** (lounge) stands against the wall, with a bouncing logo that never quite hits a corner.
-- **Thoughts** (beside the office): the office chat. Each seat has its own character (shown on their card), with lines
-  for what really happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped
-  reply, a bug found, working late, two at one desk. Only the kind of event (and a file's short name for "the same
-  file again") is used, never text from your threads. A push on a Friday or at the weekend, and failed tests on a
-  Monday, get their own lines; "It worked on my desk." always gets its answer; on a Thursday the staff compare their pay
-  (their real tokens today). The same words from several people at once ("Thinking it through…") show once, under all
-  their names. **Setup › Thoughts chat** picks Everything, Work only (no office chat) or Off.
+All made-up data: invented projects, no real threads.
+
+![A person's card: name with a star, EDIT, seat, what they are doing now, Earnings, recent messages and last steps](screenshots/card.png)
+
+*A person's card. Click anyone in the office (or a tile in List) to see their project and seat, what they are doing
+now and for how long, their thread, today's tokens under Earnings, their recent messages and last steps. The star makes
+them a favourite; EDIT changes their name and look.*
+
+![Staff rewards: the meeting room, lounge and beach furniture, most of it bought, with the spending balance at the top](screenshots/rewards.png)
+
+*Staff rewards. The tokens Claude writes become a spending balance. Here the meeting room and the lounge are unlocked
+and furnished (table, chairs, whiteboard, clock, sofa, TV, arcade machine), and the gym and volleyball set are still
+for sale.*
+
+![The List tab: everyone as tiles, grouped into Needs you, Working, Thinking, Idle and Gone home](screenshots/list.png)
+
+*List: the same office in words, grouped by what each person is doing, with what they asked or what they are working
+on.*
+
+![The Favourites tab: favourite staff by project, one who has gone home shown with a Hide box](screenshots/favourites.png)
+
+*Favourites: starred people, and whole favourite projects. A favourite who goes home waits on a beach towel instead
+of leaving (bottom left of the office picture above).*
+
+## Easy or advanced setup
+
+- **Easy** (the default): the office reads the transcripts every 3 seconds. Nothing in Claude is changed. "Needs you"
+  is worked out from the last reply, and a permission prompt may not show.
+- **Advanced** (Setup › Setup › Turn on advanced setup): adds three hooks to Claude Code's settings file
+  (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
+  straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
+  takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing. In a
+  copy put here by the installer, the hooks run its own Node.js (`node\node.exe`), so the PC needs no other.
+  It is refused when the office's folder path holds a `$`, a backtick, a `"` or a `%`, which the hook runner would read
+  as part of a command: move the office to a plainer folder first.
 
 ## Updating
 
@@ -124,6 +124,38 @@ the Releases page instead (your `data/` folder is kept). It refuses, and changes
 changed, when this copy has saved changes of its own, or when it would replace a file of yours that git ignores. A test
 copy (started with `AI_OFFICE_DATA` or `AI_OFFICE_TRANSCRIPTS` set) never updates. Restart waits while an update is
 being taken.
+
+## What you see
+
+- **Top bar:** the title goes back to the office with all projects; **Spending balance** opens Staff rewards; the sun,
+  moon and auto buttons pick light, dark, or Auto (light from sunrise to sunset, worked out from this PC's time zone,
+  so nothing is asked online); the gear opens **Setup**, with the tabs Setup (the shortcuts, easy or advanced setup),
+  Office (theme, the Thoughts chat, the projects folder, the gone-home time), Update, Help and About (version, Quit,
+  Uninstall).
+- **Projects** (left): All projects, then every project with a thread today and how many people are working,
+  thinking, need you or have finished. Click one to show only that project.
+- **Office, List and Favourites** (middle): the page opens on the office (an address ending `#list` or `#favourites`
+  opens that tab). The ticks under the tabs, **Show names**, **Project on screens** and **Show general chit-chat**,
+  are kept in this browser. Click a person to open their card. List shows everyone as tiles, about five across.
+- **Needs attention** (right, first tab): every thread whose last reply asked you something, longest waiting first.
+  Press "Answered: take off the list" on the card once you have dealt with it; it comes back if they ask again.
+- **A person's card:** their name with a **star** (a favourite) and **EDIT** (name and look; both belong to the seat),
+  **Open in Claude** (opens the thread in the Claude desktop app, when the app has a record of it), project and seat,
+  what they are doing and for how long, recent messages, last steps, what they asked, and **Earnings** (today's tokens;
+  it opens to their helpers and their tokens today, since the office opened, before it and in all).
+- **Favourites:** star a person on their card, or everyone in their project with **Favourite project**. A favourite who
+  goes home lies on a beach towel until their next thread starts. The star belongs to the seat, so the next thread in
+  that seat is a favourite too. **Hide** takes a favourite who has gone home off the tab and the beach.
+- **Staff rewards** (right, second tab): the shop. The lounge (10M tokens) and the meeting room (20M) start locked,
+  dark with a padlock; click one to unlock it. Treats come to the kitchen, furniture is carried in, and the staff try
+  out what is new. Buy everything and treat the team to each treat once, and the trophy case arrives.
+- **In the office:** the arcade machine (once bought) plays Tetris, Lunar Lander or Moon Rover; the vending machine
+  (1M-token coin) gives everyone an energy drink, and for a minute they move three times as fast; rubber ducks go to
+  meetings; the wall clock keeps the real time.
+- **Thoughts** (beside or under the office): the office chat. Each seat has a character, with lines for what really
+  happened in a thread: tests passed or failed, a commit, a push, the same file edited again, a stopped reply, a bug
+  found. The lines use the kind of event and the short step the card shows (a file's name, a command's or a helper's one-line description), never your messages or Claude's replies. **Setup › Office ›
+  Thoughts chat** picks Everything, Work only or Off.
 
 ## The rules
 
@@ -145,18 +177,6 @@ being taken.
   in `data/`.
 - **The spending balance** is every output token Claude writes from the day the office opened, less what was spent. Prices are
   TOMLIN's x 20, scaled to the output tokens a day of Claude Code work writes.
-
-## Easy or advanced setup
-
-- **Easy** (the default): the office reads the transcripts every 3 seconds. Nothing in Claude is changed. "Needs you"
-  is worked out from the last reply, and a permission prompt may not show.
-- **Advanced** (Setup › Setup › Turn on advanced setup): adds three hooks to Claude Code's settings file
-  (`~/.claude/settings.json`): on a new message, a permission prompt, and a finished reply. Claude then tells the office
-  straight away. Hooks you already have stay as they are, a copy of the file is saved first, and Go back to easy setup
-  takes out only the office's three. Each hook runs `hook.mjs`, which sends only to 127.0.0.1 and prints nothing. In a
-  copy put here by the installer, the hooks run its own Node.js (`node\node.exe`), so the PC needs no other.
-  It is refused when the office's folder path holds a `$`, a backtick, a `"` or a `%`, which the hook runner would read
-  as part of a command: move the office to a plainer folder first.
 
 ## Helping someone set it up
 
@@ -212,7 +232,13 @@ Agents (Claude and others) helping a user, for example to turn on advanced setup
 
 ## Licence
 
-The office drawing and the staff looks come from TOMLIN (PolyForm Noncommercial 1.0.0), by the same owner.
+AI Office Overview is under the **PolyForm Noncommercial License 1.0.0** (the full text is in [LICENSE](LICENSE)). In
+plain words: you may use it, change it and share it for any noncommercial purpose, such as personal use, a hobby,
+study or research, or in a charity, school or public body. Commercial use is not licensed. Anyone you share it with
+must get the licence and its `Required Notice:` line too. It is source-available, not open source, which is why GitHub
+shows the licence as "Other".
+
+The office drawing and the staff looks come from TOMLIN, by the same owner, under the same licence.
 
 The installer brings a copy of [Node.js](https://nodejs.org) (MIT licence) in `node\node.exe`. Its licence, which also
 covers the libraries built into it (OpenSSL, ICU, V8, libuv and others), is beside it in `node\LICENSE`.

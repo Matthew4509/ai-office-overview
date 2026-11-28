@@ -26,7 +26,7 @@ const BIG = /^-?\d{16,}$/;
  * A file another program holds, or one that is not a JSON object (with `hooks` an object when there), is an error,
  * never thrown, and the office does not touch it.
  */
-function readSettings(file) {
+export function readSettings(file) {
   let text;
   try { text = fs.readFileSync(file, 'utf8'); } catch (e) {
     if (e.code === 'ENOENT') return { data: {}, text: '', big: new Map() };
@@ -55,7 +55,7 @@ function readSettings(file) {
   return { data, text, big };
 }
 /** The settings as text, each long number written back with its own digits. */
-function textOf(data, big) {
+export function textOf(data, big) {
   let out = `${JSON.stringify(data, null, 2)}\n`;
   for (const [k, digits] of big) out = out.split(`"${k}"`).join(digits);
   return out;

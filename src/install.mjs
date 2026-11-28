@@ -98,17 +98,17 @@ export function removeHooks() {
     return { where, error: `${file} could not be read (${e.code || e.message}), so it was not changed: remove the lines holding --ai-office-overview-hook yourself` };
   }
   if (!/--(ai-office-overview|claude-office)-hook\b/.test(text)) return { where, none: true };
-  let data;
-  try { data = JSON.parse(text.replace(/^\uFEFF/, '')); } catch { return { where, error: `${file} is not valid JSON, so it was not changed: remove the lines holding --ai-office-overview-hook yourself` }; }
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return { where, error: `${file} does not hold settings, so it was not changed: remove the lines holding --ai-office-overview-hook yourself` };
-  const { data: next, count } = withoutThisFolders(data);
+  // Read as advanced setup reads it, so a long number (an id, say) is written back with its own digits.
+  const read = setup.readSettings(file);
+  if (read.error) return { where, error: `${file}: ${read.error.reason} Remove the lines holding --ai-office-overview-hook yourself.` };
+  const { data: next, count } = withoutThisFolders(read.data);
   // Hooks with the mark are there, but none run this folder's hook.mjs: they belong to another copy of the office.
   if (!count) return { where, none: true, others: true };
   try {
     const backup = `${file}.before-ai-office-overview-${new Date().toISOString().replace(/[:.]/g, '-')}`;
     fs.writeFileSync(backup, text);
     const tmp = `${file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, `${JSON.stringify(next, null, 2)}\n`);
+    fs.writeFileSync(tmp, setup.textOf(next, read.big));
     swapIn(tmp, file);
     const others = /--(ai-office-overview|claude-office)-hook\b/.test(JSON.stringify(next));
     return { where, removed: true, backup, ...(others ? { others: true } : {}) };

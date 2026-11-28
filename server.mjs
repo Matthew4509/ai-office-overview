@@ -43,20 +43,33 @@ function ask(r, method, pathname) {
       res.on('data', (c) => { if (body.length < 100_000) body += c; });
       res.on('end', () => { let json = null; try { json = JSON.parse(body); } catch { /* not the office */ } resolve({ status: res.statusCode, json }); });
     });
-    q.on('timeout', () => q.destroy());
+    // Something took the connection but did not answer in time: busy (the office reading a big transcript), not gone.
+    q.on('timeout', () => { resolve({ busy: true }); q.destroy(); });
     q.on('error', () => resolve(null));
     q.end(method === 'POST' ? '{}' : undefined);
   });
 }
 const isOffice = (a) => a?.status === 200 && a.json?.app === 'ai-office-overview' && typeof a.json.version === 'string';
-/** The office running over this data folder, proven by its answer; null when none is (a stale run file is ignored). */
+/** The office running over this data folder, proven by its answer; null when none is (a stale run file is ignored).
+ * One that takes the call but is too busy to answer is asked again for up to a minute; still busy, it is
+ * { ...run, busy: true }: maybe this office, so its run file is never taken away. */
 async function running() {
   const r = readRun();
   if (!r) return null;
-  return isOffice(await ask(r, 'GET', '/api/ping')) ? r : null;
+  const until = Date.now() + 60000;
+  for (;;) {
+    const a = await ask(r, 'GET', '/api/ping');
+    if (isOffice(a)) return r;
+    if (!a?.busy) return null;
+    if (Date.now() >= until) return { ...r, busy: true };
+  }
 }
 if (process.argv.includes('--stop') || process.argv.includes('--status')) {
   const r = await running();
+  if (r?.busy) {
+    console.error(`Something on port ${r.port} took the call but did not answer: the office may be busy reading transcripts. Its run file was kept. Try again in a minute.`);
+    process.exit(1);
+  }
   if (process.argv.includes('--status')) {
     console.log(r ? `AI Office Overview is running: http://127.0.0.1:${r.port}/ (started ${r.started}).` : 'AI Office Overview is not running.');
     process.exit(r ? 0 : 1);
